@@ -1,38 +1,37 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Copy, QrCode, ArrowRight } from "lucide-react";
+import { Upload, Copy, QrCode, ArrowRight, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
+import { useAuth } from "@/hooks/useAuth";
+import { useFileTransfer } from "@/hooks/useFileTransfer";
+import { Progress } from "@/components/ui/progress";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
-const Send = () => {
+const SendContent = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const { uploadFiles, uploading, uploadProgress } = useFileTransfer();
   const [files, setFiles] = useState<File[]>([]);
   const [code, setCode] = useState("");
   const [customCode, setCustomCode] = useState("");
   const [showQR, setShowQR] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  const generateCode = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
-
-  const handleFileSelect = (selectedFiles: FileList | null) => {
+  const handleFileSelect = async (selectedFiles: FileList | null) => {
     if (selectedFiles) {
       const fileArray = Array.from(selectedFiles);
       setFiles(fileArray);
-      const newCode = customCode || generateCode();
-      setCode(newCode);
       
-      // Store files in sessionStorage for peer connection
-      sessionStorage.setItem(`files_${newCode}`, JSON.stringify({
-        names: fileArray.map(f => f.name),
-        sizes: fileArray.map(f => f.size),
-      }));
-      
-      toast.success("Files ready to share!");
+      // Upload files and generate code
+      const result = await uploadFiles(fileArray, customCode || undefined, 24);
+      if (result) {
+        setCode(result.shareCode);
+        toast.success("Files uploaded and ready to share!");
+      }
     }
   };
 
@@ -40,7 +39,7 @@ const Send = () => {
     e.preventDefault();
     setIsDragging(false);
     handleFileSelect(e.dataTransfer.files);
-  }, [customCode]);
+  }, [customCode, uploadFiles]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -68,17 +67,38 @@ const Send = () => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-2xl animate-fade-in">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
-            Share Files Instantly
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Upload your files and share with a code or QR
-          </p>
+        <div className="flex justify-between items-center mb-8">
+          <div className="text-center flex-1">
+            <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
+              Share Files Instantly
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              Signed in as {user?.email}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={signOut}
+            className="shrink-0"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
 
         <Card className="p-8 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
-          {!files.length ? (
+          {uploading ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className="animate-spin mx-auto mb-4 h-12 w-12 border-4 border-primary border-t-transparent rounded-full" />
+                <h3 className="text-xl font-semibold mb-2">Uploading Files...</h3>
+                <p className="text-muted-foreground mb-4">Please wait while we process your files</p>
+                <Progress value={uploadProgress} className="w-full" />
+                <p className="text-sm text-muted-foreground mt-2">{uploadProgress}% complete</p>
+              </div>
+            </div>
+          ) : !files.length ? (
             <>
               <div
                 onDrop={handleDrop}
@@ -95,7 +115,7 @@ const Send = () => {
                   Drop files here or click to browse
                 </h3>
                 <p className="text-muted-foreground mb-6">
-                  Select any files you want to share
+                  Max 50MB per file. Allowed: Images, PDFs, Documents, Archives
                 </p>
                 <input
                   type="file"
@@ -103,6 +123,7 @@ const Send = () => {
                   onChange={(e) => handleFileSelect(e.target.files)}
                   className="hidden"
                   id="file-input"
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar"
                 />
                 <label htmlFor="file-input">
                   <Button size="lg" className="bg-gradient-primary hover:opacity-90 shadow-glow" asChild>
@@ -119,11 +140,11 @@ const Send = () => {
                   Custom Code (Optional)
                 </label>
                 <Input
-                  placeholder="Enter 6-digit code or leave blank"
-                  maxLength={6}
+                  placeholder="Enter custom code (6+ characters)"
                   value={customCode}
-                  onChange={(e) => setCustomCode(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
                   className="text-center text-lg tracking-widest"
+                  maxLength={20}
                 />
               </div>
             </>
@@ -216,6 +237,14 @@ const Send = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const Send = () => {
+  return (
+    <ProtectedRoute>
+      <SendContent />
+    </ProtectedRoute>
   );
 };
 

@@ -1,21 +1,23 @@
 import { useNavigate } from "react-router-dom";
-import { Upload, Download, Share2, Zap, Shield, Smartphone } from "lucide-react";
+import { Upload, Download, Share2, Zap, Shield, Smartphone, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   const features = [
     {
       icon: Zap,
       title: "Lightning Fast",
-      description: "Transfer files at maximum speed with peer-to-peer technology",
+      description: "Transfer files securely with proper backend storage and tracking",
     },
     {
       icon: Shield,
       title: "Secure Transfer",
-      description: "Your files are encrypted and transferred directly without cloud storage",
+      description: "Files stored with encryption. Download logs track all access",
     },
     {
       icon: Smartphone,
@@ -31,6 +33,19 @@ const Index = () => {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary-glow/5 to-transparent" />
         
         <div className="container mx-auto px-4 py-16 md:py-24 relative">
+          {user && (
+            <div className="flex justify-end mb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={signOut}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
+          )}
+          
           <div className="max-w-4xl mx-auto text-center animate-fade-in">
             <div className="inline-flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full text-sm font-medium text-primary mb-6">
               <Share2 className="h-4 w-4" />
@@ -44,28 +59,51 @@ const Index = () => {
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-              Transfer files of any size with a simple code or QR. No signup, no limits, just pure file sharing.
+              Transfer files with secure codes or QR. {!user && "Sign in to get started with tracked, encrypted transfers."}
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button
-                size="lg"
-                onClick={() => navigate("/send")}
-                className="bg-gradient-primary hover:opacity-90 shadow-glow text-lg h-14 px-8 min-w-[200px]"
-              >
-                <Upload className="mr-2 h-5 w-5" />
-                Send Files
-              </Button>
-              
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => navigate("/receive")}
-                className="border-2 text-lg h-14 px-8 min-w-[200px] hover:bg-muted/50"
-              >
-                <Download className="mr-2 h-5 w-5" />
-                Receive Files
-              </Button>
+              {user ? (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={() => navigate("/send")}
+                    className="bg-gradient-primary hover:opacity-90 shadow-glow text-lg h-14 px-8 min-w-[200px]"
+                  >
+                    <Upload className="mr-2 h-5 w-5" />
+                    Send Files
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => navigate("/receive")}
+                    className="border-2 text-lg h-14 px-8 min-w-[200px] hover:bg-muted/50"
+                  >
+                    <Download className="mr-2 h-5 w-5" />
+                    Receive Files
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    size="lg"
+                    onClick={() => navigate("/auth")}
+                    className="bg-gradient-primary hover:opacity-90 shadow-glow text-lg h-14 px-8 min-w-[200px]"
+                  >
+                    Get Started
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => navigate("/auth")}
+                    className="border-2 text-lg h-14 px-8 min-w-[200px] hover:bg-muted/50"
+                  >
+                    Sign In
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -117,17 +155,17 @@ const Index = () => {
                 {
                   step: "1",
                   title: "Select Your Files",
-                  description: "Upload any file type - documents, images, videos, or anything else.",
+                  description: "Upload files up to 50MB each - documents, images, videos, or archives.",
                 },
                 {
                   step: "2",
                   title: "Get Your Code",
-                  description: "Receive a unique 6-digit code or QR code to share with your recipient.",
+                  description: "Receive a unique secure code or QR code to share with your recipient.",
                 },
                 {
                   step: "3",
                   title: "Share & Transfer",
-                  description: "Your recipient enters the code and downloads files instantly.",
+                  description: "Your recipient enters the code and downloads files securely with full tracking.",
                 },
               ].map((item, idx) => (
                 <div
@@ -161,15 +199,15 @@ const Index = () => {
               Ready to Share Your Files?
             </h2>
             <p className="text-xl mb-8 opacity-90">
-              Start transferring files securely in seconds. No registration required.
+              Start transferring files securely in seconds. {!user && "Create an account to begin."}
             </p>
             <Button
               size="lg"
-              onClick={() => navigate("/send")}
+              onClick={() => navigate(user ? "/send" : "/auth")}
               className="bg-white text-primary hover:bg-white/90 text-lg h-14 px-8 shadow-xl"
             >
               <Upload className="mr-2 h-5 w-5" />
-              Get Started Now
+              {user ? "Send Files Now" : "Get Started"}
             </Button>
           </div>
         </div>
@@ -180,7 +218,7 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="text-center text-muted-foreground">
             <p className="text-sm">
-              Built for Computer Networking Project • Secure File Sharing
+              Built for Computer Networking Project • Secure File Sharing with Backend Storage & Tracking
             </p>
           </div>
         </div>
