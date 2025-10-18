@@ -14,13 +14,158 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      download_logs: {
+        Row: {
+          downloaded_at: string
+          downloaded_by: string | null
+          file_id: string
+          id: string
+          ip_address: string | null
+          transfer_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          downloaded_at?: string
+          downloaded_by?: string | null
+          file_id: string
+          id?: string
+          ip_address?: string | null
+          transfer_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          downloaded_at?: string
+          downloaded_by?: string | null
+          file_id?: string
+          id?: string
+          ip_address?: string | null
+          transfer_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "download_logs_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "transfer_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "download_logs_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transfer_files: {
+        Row: {
+          created_at: string
+          file_size: number
+          id: string
+          mime_type: string
+          original_name: string
+          storage_path: string
+          transfer_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_size: number
+          id?: string
+          mime_type: string
+          original_name: string
+          storage_path: string
+          transfer_id: string
+        }
+        Update: {
+          created_at?: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          original_name?: string
+          storage_path?: string
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_files_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfers: {
+        Row: {
+          created_at: string
+          download_count: number
+          expires_at: string | null
+          id: string
+          max_downloads: number | null
+          owner_id: string
+          password_hash: string | null
+          share_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          download_count?: number
+          expires_at?: string | null
+          id?: string
+          max_downloads?: number | null
+          owner_id: string
+          password_hash?: string | null
+          share_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          download_count?: number
+          expires_at?: string | null
+          id?: string
+          max_downloads?: number | null
+          owner_id?: string
+          password_hash?: string | null
+          share_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_share_code: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
