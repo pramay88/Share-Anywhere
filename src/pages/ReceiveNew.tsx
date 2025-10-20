@@ -199,9 +199,8 @@ const ReceiveContent = () => {
 
 const Receive = () => {
   return (
-    <ProtectedRoute>
       <ReceiveContent />
-    </ProtectedRoute>
+    
   );
 };
 

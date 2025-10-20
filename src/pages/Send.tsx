@@ -136,9 +136,9 @@ const Send = () => {
           <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
             Share Files Instantly
           </h1>
-          <p className="text-muted-foreground text-lg">
+          {/* <p className="text-muted-foreground text-lg">
             No registration required
-          </p>
+          </p> */}
         </div>
 
         <Card className="p-8 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
