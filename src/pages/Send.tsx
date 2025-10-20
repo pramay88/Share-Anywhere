@@ -53,34 +53,79 @@ const Send = () => {
   };
 
   const copyLink = () => {
-    const link = `${window.location.origin}/receive?code=${code}`;
+    if (!code) {
+      toast.error("Share code not ready yet. Please wait a moment.");
+      return;
+    }
+    const link = `${window.location.origin}/receive?code=${encodeURIComponent(code)}`;
     navigator.clipboard.writeText(link);
     toast.success("Link copied to clipboard!");
   };
 
-  const shareUrl = `${window.location.origin}/receive?code=${code}`;
-
+  const shareUrl = code ? `${window.location.origin}/receive?code=${encodeURIComponent(code)}` : "";
   const shareQR = async () => {
     try {
-      const canvas = document.createElement('canvas');
-      const qrElement = document.querySelector('svg');
-      if (!qrElement) return;
-      
-      const svg = qrElement.outerHTML;
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const file = new File([blob], 'qr-code.svg', { type: 'image/svg+xml' });
-      
-      if (navigator.share) {
+      if (!code) {
+        toast.error("Share code not ready yet.");
+        return;
+      }
+      const svg = document.getElementById('share-qr-svg') as SVGElement | null;
+      if (!svg) {
+        toast.error("QR not ready yet.");
+        return;
+      }
+
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      // Convert SVG to PNG for broader share support
+      const img = new Image();
+      const size = 512;
+      const pngBlob: Blob = await new Promise((resolve, reject) => {
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error("Canvas context not available"));
+            return;
+          }
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, size, size);
+          ctx.drawImage(img, 0, 0, size, size);
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed generating image"))), 'image/png');
+        };
+        img.onerror = reject;
+        img.src = url;
+      });
+
+      URL.revokeObjectURL(url);
+
+      const file = new File([pngBlob], `qr-${code}.png`, { type: 'image/png' });
+
+      if (navigator.share && (navigator as any).canShare?.({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'Share QR Code',
-          text: `Scan to download files. Code: ${code}`,
+          text: `Scan to download files.\n${shareUrl}`,
         });
+        toast.success("QR shared");
+      } else if (navigator.share) {
+        await navigator.share({
+          title: 'Share link',
+          text: `Download files: ${shareUrl}`,
+          url: shareUrl,
+        });
+        toast.success("Link shared");
       } else {
-        toast.error('Sharing not supported on this device');
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success("Link copied to clipboard!");
       }
     } catch (error) {
       console.error('Share error:', error);
+      toast.error('Sharing failed');
     }
   };
 
@@ -204,7 +249,7 @@ const Send = () => {
               </div>
 
               <div className="bg-white p-8 rounded-xl flex flex-col items-center animate-scale-in space-y-4">
-                <QRCodeSVG value={shareUrl} size={256} level="H" />
+                <QRCodeSVG id="share-qr-svg" value={shareUrl} size={256} level="H" />
                 <p className="text-sm text-muted-foreground text-center">
                   Scan to download files instantly
                 </p>

@@ -42,8 +42,8 @@ export const useFileTransfer = () => {
       } else {
         const { data, error } = await supabase.rpc("generate_share_code");
         if (error) throw error;
-        shareCode = data;
-      }
+        shareCode = (data as string)?.toUpperCase();
+        if (!shareCode) throw new Error("Failed to generate share code");
 
       // Calculate expiration
       const expiresAt = expiresInHours
