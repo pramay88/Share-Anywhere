@@ -1,24 +1,20 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Copy, QrCode, ArrowRight, LogOut } from "lucide-react";
+import { Upload, Copy, Share2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { useAuth } from "@/hooks/useAuth";
 import { useFileTransfer } from "@/hooks/useFileTransfer";
 import { Progress } from "@/components/ui/progress";
-import ProtectedRoute from "@/components/ProtectedRoute";
 
-const SendContent = () => {
+const Send = () => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
   const { uploadFiles, uploading, uploadProgress } = useFileTransfer();
   const [files, setFiles] = useState<File[]>([]);
   const [code, setCode] = useState("");
   const [customCode, setCustomCode] = useState("");
-  const [showQR, setShowQR] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFileSelect = async (selectedFiles: FileList | null) => {
@@ -64,27 +60,40 @@ const SendContent = () => {
 
   const shareUrl = `${window.location.origin}/receive?code=${code}`;
 
+  const shareQR = async () => {
+    try {
+      const canvas = document.createElement('canvas');
+      const qrElement = document.querySelector('svg');
+      if (!qrElement) return;
+      
+      const svg = qrElement.outerHTML;
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const file = new File([blob], 'qr-code.svg', { type: 'image/svg+xml' });
+      
+      if (navigator.share) {
+        await navigator.share({
+          files: [file],
+          title: 'Share QR Code',
+          text: `Scan to download files. Code: ${code}`,
+        });
+      } else {
+        toast.error('Sharing not supported on this device');
+      }
+    } catch (error) {
+      console.error('Share error:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-2xl animate-fade-in">
-        <div className="flex justify-between items-center mb-8">
-          <div className="text-center flex-1">
-            <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
-              Share Files Instantly
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              Signed in as {user?.email}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={signOut}
-            className="shrink-0"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
+            Share Files Instantly
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            No registration required
+          </p>
         </div>
 
         <Card className="p-8 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
@@ -172,7 +181,7 @@ const SendContent = () => {
                 <div className="text-5xl font-bold tracking-wider mb-4 animate-pulse-glow">
                   {code}
                 </div>
-                <div className="flex gap-3 justify-center">
+                <div className="flex gap-3 justify-center flex-wrap">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -191,23 +200,24 @@ const SendContent = () => {
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Link
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowQR(!showQR)}
-                    className="bg-white/20 hover:bg-white/30 text-white border-white/30"
-                  >
-                    <QrCode className="h-4 w-4 mr-2" />
-                    QR Code
-                  </Button>
                 </div>
               </div>
 
-              {showQR && (
-                <div className="bg-white p-6 rounded-xl flex justify-center animate-scale-in">
-                  <QRCodeSVG value={shareUrl} size={200} level="H" />
-                </div>
-              )}
+              <div className="bg-white p-8 rounded-xl flex flex-col items-center animate-scale-in space-y-4">
+                <QRCodeSVG value={shareUrl} size={256} level="H" />
+                <p className="text-sm text-muted-foreground text-center">
+                  Scan to download files instantly
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={shareQR}
+                  className="w-full"
+                >
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share QR Code
+                </Button>
+              </div>
 
               <div className="text-center">
                 <Button
@@ -215,7 +225,6 @@ const SendContent = () => {
                   onClick={() => {
                     setFiles([]);
                     setCode("");
-                    setShowQR(false);
                     setCustomCode("");
                   }}
                 >
@@ -237,14 +246,6 @@ const SendContent = () => {
         </div>
       </div>
     </div>
-  );
-};
-
-const Send = () => {
-  return (
-    <ProtectedRoute>
-      <SendContent />
-    </ProtectedRoute>
   );
 };
 

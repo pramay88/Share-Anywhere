@@ -22,8 +22,8 @@ export const useFileTransfer = () => {
       setUploading(true);
       setUploadProgress(0);
 
+      // Get user if authenticated (optional)
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
 
       // Generate or use custom code
       let shareCode: string;
@@ -50,11 +50,11 @@ export const useFileTransfer = () => {
         ? new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString()
         : null;
 
-      // Create transfer record
+      // Create transfer record (owner_id is now optional)
       const { data: transfer, error: transferError } = await supabase
         .from("transfers")
         .insert({
-          owner_id: user.id,
+          owner_id: user?.id || null,
           share_code: shareCode,
           expires_at: expiresAt,
         })
@@ -70,7 +70,7 @@ export const useFileTransfer = () => {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const fileExt = file.name.split(".").pop();
-        const fileName = `${user.id}/${transfer.id}/${Date.now()}-${Math.random()
+        const fileName = `anonymous/${transfer.id}/${Date.now()}-${Math.random()
           .toString(36)
           .substring(7)}.${fileExt}`;
 

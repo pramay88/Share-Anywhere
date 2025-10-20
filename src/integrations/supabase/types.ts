@@ -128,7 +128,7 @@ export type Database = {
           expires_at: string | null
           id: string
           max_downloads: number | null
-          owner_id: string
+          owner_id: string | null
           password_hash: string | null
           share_code: string
           updated_at: string
@@ -139,7 +139,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           max_downloads?: number | null
-          owner_id: string
+          owner_id?: string | null
           password_hash?: string | null
           share_code: string
           updated_at?: string
@@ -150,7 +150,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           max_downloads?: number | null
-          owner_id?: string
+          owner_id?: string | null
           password_hash?: string | null
           share_code?: string
           updated_at?: string
