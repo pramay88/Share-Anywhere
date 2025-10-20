@@ -69,7 +69,7 @@ const Send = () => {
         toast.error("Share code not ready yet.");
         return;
       }
-      const svg = document.getElementById('share-qr-svg') as SVGElement | null;
+      const svg = document.getElementById('share-qr-svg') as unknown as SVGElement | null;
       if (!svg) {
         toast.error("QR not ready yet.");
         return;

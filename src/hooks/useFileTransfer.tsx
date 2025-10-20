@@ -44,6 +44,7 @@ export const useFileTransfer = () => {
         if (error) throw error;
         shareCode = (data as string)?.toUpperCase();
         if (!shareCode) throw new Error("Failed to generate share code");
+      }
 
       // Calculate expiration
       const expiresAt = expiresInHours
