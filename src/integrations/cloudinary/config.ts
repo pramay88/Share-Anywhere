@@ -20,32 +20,51 @@ if (!cloudinaryConfig.cloudName) {
 
 /**
  * Upload file to Cloudinary using unsigned upload
- * This is secure because we use upload presets configured in Cloudinary dashboard
+ * Enhanced with better progress tracking and metadata
  */
 export async function uploadToCloudinary(
-    file: File,
-    folder: string = 'sendanywhere',
-    onProgress?: (progress: number) => void
+    file: File | Blob,
+    folder: string = 'shareanywhere',
+    onProgress?: (progress: number, speed?: number) => void
 ): Promise<{
     url: string;
     publicId: string;
     secureUrl: string;
     resourceType: string;
+    bytes: number;
+    format: string;
 }> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', cloudinaryConfig.uploadPreset);
     formData.append('folder', folder);
 
+    // Optimize upload settings
+    formData.append('quality', 'auto');
+    formData.append('fetch_format', 'auto');
+
+    let startTime = Date.now();
+    let lastLoaded = 0;
+
     // Use XMLHttpRequest for progress tracking
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
-        // Track upload progress
+        // Track upload progress with speed calculation
         xhr.upload.addEventListener('progress', (e) => {
             if (e.lengthComputable && onProgress) {
                 const progress = Math.round((e.loaded / e.total) * 100);
-                onProgress(progress);
+
+                // Calculate upload speed
+                const now = Date.now();
+                const timeDiff = (now - startTime) / 1000; // seconds
+                const bytesDiff = e.loaded - lastLoaded;
+                const speed = timeDiff > 0 ? bytesDiff / timeDiff : 0;
+
+                onProgress(progress, speed);
+
+                lastLoaded = e.loaded;
+                startTime = now;
             }
         });
 
@@ -57,6 +76,8 @@ export async function uploadToCloudinary(
                     publicId: response.public_id,
                     secureUrl: response.secure_url,
                     resourceType: response.resource_type,
+                    bytes: response.bytes,
+                    format: response.format,
                 });
             } else {
                 reject(new Error(`Upload failed with status ${xhr.status}`));
@@ -81,9 +102,17 @@ export async function uploadToCloudinary(
 
 /**
  * Get download URL for a Cloudinary file
+ * Note: For downloads, we should use the secure_url stored in Firestore
+ * This function is kept for backward compatibility
  */
-export function getCloudinaryUrl(publicId: string): string {
-    return `https://res.cloudinary.com/${cloudinaryConfig.cloudName}/raw/upload/${publicId}`;
+export function getCloudinaryUrl(publicId: string, resourceType: string = 'raw'): string {
+    // If publicId already contains the full URL, return it
+    if (publicId.startsWith('http')) {
+        return publicId;
+    }
+
+    // Otherwise construct the URL based on resource type
+    return `https://res.cloudinary.com/${cloudinaryConfig.cloudName}/${resourceType}/upload/${publicId}`;
 }
 
 /**

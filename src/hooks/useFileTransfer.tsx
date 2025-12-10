@@ -248,7 +248,7 @@ export const useFileTransfer = () => {
   const downloadFile = async (
     transferId: string,
     fileId: string,
-    cloudinaryPublicId: string,
+    cloudinaryUrl: string,
     originalName: string
   ) => {
     try {
@@ -276,8 +276,8 @@ export const useFileTransfer = () => {
         console.warn('Failed to log download:', logError);
       }
 
-      // Get download URL
-      const downloadUrl = getCloudinaryUrl(cloudinaryPublicId);
+      // Use the stored Cloudinary URL directly
+      const downloadUrl = cloudinaryUrl;
 
       // Download file
       const downloadFileData = async () => {

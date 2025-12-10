@@ -132,8 +132,8 @@ const Send = () => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-2xl animate-fade-in">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-primary bg-clip-text text-transparent">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
             Share Files Instantly
           </h1>
           {/* <p className="text-muted-foreground text-lg">
@@ -141,13 +141,13 @@ const Send = () => {
           </p> */}
         </div>
 
-        <Card className="p-8 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
+        <Card className="p-6 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
           {uploading ? (
             <div className="space-y-4">
               <div className="text-center">
-                <div className="animate-spin mx-auto mb-4 h-12 w-12 border-4 border-primary border-t-transparent rounded-full" />
-                <h3 className="text-xl font-semibold mb-2">Uploading Files...</h3>
-                <p className="text-muted-foreground mb-4">Please wait while we process your files</p>
+                <div className="animate-spin mx-auto mb-3 h-8 w-8 border-3 border-primary border-t-transparent rounded-full" />
+                <h3 className="text-lg font-semibold mb-1">Uploading Files...</h3>
+                <p className="text-sm text-muted-foreground mb-3">Please wait while we process your files</p>
                 <Progress value={uploadProgress} className="w-full" />
                 <p className="text-sm text-muted-foreground mt-2">{uploadProgress}% complete</p>
               </div>
@@ -158,16 +158,16 @@ const Send = () => {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${isDragging
-                    ? "border-primary bg-primary/5 scale-[1.02]"
-                    : "border-border hover:border-primary/50 hover:bg-muted/30"
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${isDragging
+                  ? "border-primary bg-primary/5 scale-[1.02]"
+                  : "border-border hover:border-primary/50 hover:bg-muted/30"
                   }`}
               >
-                <Upload className="w-16 h-16 mx-auto mb-4 text-primary" />
-                <h3 className="text-xl font-semibold mb-2">
+                <Upload className="w-12 h-12 mx-auto mb-3 text-primary" />
+                <h3 className="text-lg font-semibold mb-2">
                   Drop files here or click to browse
                 </h3>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-sm text-muted-foreground mb-4">
                   Max 50MB per file. Allowed: Images, PDFs, Documents, Archives
                 </p>
                 <input
@@ -179,31 +179,31 @@ const Send = () => {
                   accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar"
                 />
                 <label htmlFor="file-input">
-                  <Button size="lg" className="bg-gradient-primary hover:opacity-90 shadow-glow" asChild>
+                  <Button className="bg-gradient-primary hover:opacity-90 shadow-glow" asChild>
                     <span>
                       Select Files
-                      <ArrowRight className="ml-2 h-5 w-5" />
+                      <ArrowRight className="ml-2 h-4 w-4" />
                     </span>
                   </Button>
                 </label>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-4">
                 <label className="block text-sm font-medium mb-2">
                   Custom Code (Optional)
                 </label>
                 <Input
                   placeholder="Enter custom code (6+ characters)"
                   value={customCode}
-                  onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
-                  className="text-center text-lg tracking-widest"
+                  onChange={(e) => setCustomCode(e.target.value.trim().toUpperCase())}
+                  className="text-center tracking-widest"
                   maxLength={20}
                 />
               </div>
             </>
           ) : (
-            <div className="space-y-6 animate-scale-in">
-              <div className="bg-muted/50 rounded-lg p-4">
+            <div className="space-y-4 animate-scale-in">
+              <div className="bg-muted/50 rounded-lg p-3">
                 <h3 className="font-semibold mb-3">Selected Files:</h3>
                 <div className="space-y-2">
                   {files.map((file, idx) => (
@@ -220,12 +220,12 @@ const Send = () => {
                 </div>
               </div>
 
-              <div className="bg-gradient-primary p-6 rounded-xl text-center text-white shadow-glow">
-                <p className="text-sm mb-2 opacity-90">Your Share Code</p>
-                <div className="text-5xl font-bold tracking-wider mb-4 animate-pulse-glow">
+              <div className="bg-gradient-primary p-4 rounded-xl text-center text-white shadow-glow">
+                <p className="text-xs mb-1 opacity-90">Your Share Code</p>
+                <div className="text-3xl font-bold tracking-wider mb-3 animate-pulse-glow">
                   {code}
                 </div>
-                <div className="flex gap-3 justify-center flex-wrap">
+                <div className="flex gap-2 justify-center flex-wrap">
                   <Button
                     variant="secondary"
                     size="sm"
@@ -247,8 +247,8 @@ const Send = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-8 rounded-xl flex flex-col items-center animate-scale-in space-y-4">
-                <QRCodeSVG id="share-qr-svg" value={shareUrl} size={256} level="H" />
+              <div className="bg-white p-4 rounded-xl flex flex-col items-center animate-scale-in space-y-3">
+                <QRCodeSVG id="share-qr-svg" value={shareUrl} size={180} level="H" />
                 <p className="text-sm text-muted-foreground text-center">
                   Scan to download files instantly
                 </p>
@@ -279,7 +279,7 @@ const Send = () => {
           )}
         </Card>
 
-        <div className="text-center mt-6">
+        <div className="text-center mt-4">
           <Button
             variant="ghost"
             onClick={() => navigate("/receive")}
