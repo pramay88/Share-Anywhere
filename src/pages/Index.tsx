@@ -9,44 +9,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Header } from "@/components/Header";
 
 const Index = () => {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="w-full py-4 px-6 md:px-12 flex justify-between items-center border-b">
-        <div
-          className="flex items-center gap-2.5 cursor-pointer"
-          onClick={() => navigate("/")}
-        >
-          <img src="/logo.png" alt="ShareAnywhere" className="h-6 w-6 object-contain" />
-          <span className="text-lg font-semibold">ShareAnywhere</span>
-        </div>
-
-        <nav className="hidden md:flex items-center gap-6">
-          <button
-            onClick={() => navigate("/send")}
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Send
-          </button>
-          <button
-            onClick={() => navigate("/receive")}
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Receive
-          </button>
-          <Button
-            onClick={() => navigate("/auth")}
-            variant="outline"
-            size="sm"
-          >
-            Sign In
-          </Button>
-        </nav>
-      </header>
+      <Header />
 
       {/* Hero Section */}
       <section className="flex-1 flex flex-col justify-center items-center text-center py-20 px-6">
