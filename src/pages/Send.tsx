@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Copy, Share2, ArrowRight } from "lucide-react";
+import { Upload, Copy, Share2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -130,26 +130,29 @@ const Send = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl animate-fade-in">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-            Share Files Instantly
-          </h1>
-          {/* <p className="text-muted-foreground text-lg">
-            No registration required
-          </p> */}
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="w-full max-w-xl">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="mb-4 -ml-2"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">Send Files</h1>
+          <p className="text-muted-foreground">Share files with a simple code</p>
         </div>
 
-        <Card className="p-6 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
+        <Card className="p-6">
           {uploading ? (
             <div className="space-y-4">
               <div className="text-center">
-                <div className="animate-spin mx-auto mb-3 h-8 w-8 border-3 border-primary border-t-transparent rounded-full" />
-                <h3 className="text-lg font-semibold mb-1">Uploading Files...</h3>
-                <p className="text-sm text-muted-foreground mb-3">Please wait while we process your files</p>
-                <Progress value={uploadProgress} className="w-full" />
-                <p className="text-sm text-muted-foreground mt-2">{uploadProgress}% complete</p>
+                <div className="animate-spin mx-auto mb-4 h-8 w-8 border-2 border-foreground border-t-transparent rounded-full" />
+                <h3 className="text-lg font-semibold mb-2">Uploading Files...</h3>
+                <Progress value={uploadProgress} className="w-full mb-2" />
+                <p className="text-sm text-muted-foreground">{uploadProgress}% complete</p>
               </div>
             </div>
           ) : !files.length ? (
@@ -158,17 +161,17 @@ const Send = () => {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${isDragging
-                  ? "border-primary bg-primary/5 scale-[1.02]"
-                  : "border-border hover:border-primary/50 hover:bg-muted/30"
+                className={`border-2 border-dashed rounded-lg p-10 text-center transition-all ${isDragging
+                  ? "border-primary bg-accent"
+                  : "border-border hover:border-muted-foreground hover:bg-accent/50"
                   }`}
               >
-                <Upload className="w-12 h-12 mx-auto mb-3 text-primary" />
-                <h3 className="text-lg font-semibold mb-2">
+                <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                <h3 className="font-semibold mb-1">
                   Drop files here or click to browse
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Max 50MB per file. Allowed: Images, PDFs, Documents, Archives
+                  Max 50MB per file
                 </p>
                 <input
                   type="file"
@@ -179,11 +182,8 @@ const Send = () => {
                   accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar"
                 />
                 <label htmlFor="file-input">
-                  <Button className="bg-gradient-primary hover:opacity-90 shadow-glow" asChild>
-                    <span>
-                      Select Files
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </span>
+                  <Button asChild>
+                    <span>Select Files</span>
                   </Button>
                 </label>
               </div>
@@ -196,20 +196,20 @@ const Send = () => {
                   placeholder="Enter custom code (6+ characters)"
                   value={customCode}
                   onChange={(e) => setCustomCode(e.target.value.trim().toUpperCase())}
-                  className="text-center tracking-widest"
+                  className="text-center tracking-wider"
                   maxLength={20}
                 />
               </div>
             </>
           ) : (
-            <div className="space-y-4 animate-scale-in">
-              <div className="bg-muted/50 rounded-lg p-3">
-                <h3 className="font-semibold mb-3">Selected Files:</h3>
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-card p-4">
+                <h3 className="font-semibold mb-3 text-sm">Selected Files</h3>
                 <div className="space-y-2">
                   {files.map((file, idx) => (
                     <div
                       key={idx}
-                      className="flex justify-between items-center text-sm bg-card p-3 rounded-md"
+                      className="flex justify-between items-center text-sm bg-background p-3 rounded-md"
                     >
                       <span className="truncate flex-1">{file.name}</span>
                       <span className="text-muted-foreground ml-4">
@@ -220,9 +220,9 @@ const Send = () => {
                 </div>
               </div>
 
-              <div className="bg-gradient-primary p-4 rounded-xl text-center text-white shadow-glow">
-                <p className="text-xs mb-1 opacity-90">Your Share Code</p>
-                <div className="text-3xl font-bold tracking-wider mb-3 animate-pulse-glow">
+              <div className="bg-primary text-primary-foreground p-6 rounded-lg text-center">
+                <p className="text-xs mb-2 opacity-90">Share Code</p>
+                <div className="text-3xl font-bold tracking-wider mb-4">
                   {code}
                 </div>
                 <div className="flex gap-2 justify-center flex-wrap">
@@ -230,7 +230,6 @@ const Send = () => {
                     variant="secondary"
                     size="sm"
                     onClick={copyCode}
-                    className="bg-white/20 hover:bg-white/30 text-white border-white/30"
                   >
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Code
@@ -239,7 +238,6 @@ const Send = () => {
                     variant="secondary"
                     size="sm"
                     onClick={copyLink}
-                    className="bg-white/20 hover:bg-white/30 text-white border-white/30"
                   >
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Link
@@ -247,10 +245,10 @@ const Send = () => {
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-xl flex flex-col items-center animate-scale-in space-y-3">
+              <div className="bg-card border rounded-lg p-6 flex flex-col items-center space-y-3">
                 <QRCodeSVG id="share-qr-svg" value={shareUrl} size={180} level="H" />
-                <p className="text-sm text-muted-foreground text-center">
-                  Scan to download files instantly
+                <p className="text-xs text-muted-foreground text-center">
+                  Scan to download files
                 </p>
                 <Button
                   variant="outline"
@@ -263,9 +261,9 @@ const Send = () => {
                 </Button>
               </div>
 
-              <div className="text-center">
+              <div className="text-center pt-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => {
                     setFiles([]);
                     setCode("");
@@ -279,11 +277,11 @@ const Send = () => {
           )}
         </Card>
 
-        <div className="text-center mt-4">
+        <div className="text-center mt-6">
           <Button
             variant="ghost"
             onClick={() => navigate("/receive")}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground"
           >
             Want to receive files instead?
           </Button>

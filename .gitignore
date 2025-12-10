@@ -27,3 +27,4 @@ dist-ssr
 .env
 /node_modules
 supabase/config.toml
+.vercel

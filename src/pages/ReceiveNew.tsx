@@ -61,17 +61,24 @@ const ReceiveContent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl animate-fade-in">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-            Receive Files
-          </h1>
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="w-full max-w-xl">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="mb-4 -ml-2"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight mb-2">Receive Files</h1>
+          <p className="text-muted-foreground">Enter the share code to download files</p>
         </div>
 
-        <Card className="p-6 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
+        <Card className="p-6">
           {!transfer ? (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium mb-3">
                   Enter Share Code
@@ -80,7 +87,7 @@ const ReceiveContent = () => {
                   placeholder="Enter code"
                   value={code}
                   onChange={(e) => setCode(e.target.value.trim().toUpperCase())}
-                  className="text-center text-2xl tracking-widest font-bold h-12"
+                  className="text-center text-xl tracking-wider font-bold h-12"
                   disabled={isConnecting}
                 />
               </div>
@@ -89,11 +96,11 @@ const ReceiveContent = () => {
                 size="default"
                 onClick={handleConnect}
                 disabled={code.length < 6 || isConnecting}
-                className="w-full bg-gradient-primary hover:opacity-90 shadow-glow h-11"
+                className="w-full h-11"
               >
                 {isConnecting ? (
                   <>
-                    <div className="animate-spin mr-2 h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                    <div className="animate-spin mr-2 h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full" />
                     Connecting...
                   </>
                 ) : (
@@ -104,20 +111,20 @@ const ReceiveContent = () => {
                 )}
               </Button>
 
-              <div className="text-center text-sm text-muted-foreground">
+              <div className="text-center text-sm text-muted-foreground pt-4 border-t">
                 <p>Or scan the QR code from the sender's device</p>
               </div>
             </div>
           ) : (
-            <div className="space-y-4 animate-scale-in">
-              <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
+            <div className="space-y-4">
+              <div className="flex items-center justify-center gap-2 pb-4 border-b">
                 <CheckCircle2 className="h-6 w-6" />
                 <span className="text-lg font-semibold">Transfer Found!</span>
               </div>
 
-              <div className="bg-muted/50 rounded-lg p-3">
+              <div className="rounded-lg border bg-card p-4">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-semibold">Available Files:</h3>
+                  <h3 className="font-semibold text-sm">Available Files</h3>
                   <span className="text-sm text-muted-foreground">
                     {transfer.files.length} file(s)
                   </span>
@@ -126,7 +133,7 @@ const ReceiveContent = () => {
                   {transfer.files.map((file: any) => (
                     <div
                       key={file.id}
-                      className="flex justify-between items-center text-sm bg-card p-3 rounded-md"
+                      className="flex justify-between items-center text-sm bg-background p-3 rounded-md"
                     >
                       <span className="truncate flex-1">{file.original_name}</span>
                       <div className="flex items-center gap-3">
@@ -149,15 +156,15 @@ const ReceiveContent = () => {
               <Button
                 size="default"
                 onClick={handleDownloadAll}
-                className="w-full bg-gradient-primary hover:opacity-90 shadow-glow h-11"
+                className="w-full h-11"
               >
                 <Download className="mr-2 h-5 w-5" />
                 Download All Files
               </Button>
 
-              <div className="text-center">
+              <div className="text-center pt-2">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => {
                     setCode("");
                     setTransfer(null);
@@ -169,17 +176,6 @@ const ReceiveContent = () => {
             </div>
           )}
         </Card>
-
-        <div className="text-center mt-4">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/")}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
-          </Button>
-        </div>
       </div>
     </div>
   );
