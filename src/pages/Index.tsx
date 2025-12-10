@@ -18,12 +18,10 @@ const Index = () => {
       {/* Header */}
       <header className="w-full py-4 px-6 md:px-12 flex justify-between items-center border-b">
         <div
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center gap-2.5 cursor-pointer"
           onClick={() => navigate("/")}
         >
-          <div className="bg-primary p-2 rounded-md">
-            <img src="/logo.png" alt="ShareAnywhere" className="h-5 w-5 object-contain invert" />
-          </div>
+          <img src="/logo.png" alt="ShareAnywhere" className="h-6 w-6 object-contain" />
           <span className="text-lg font-semibold">ShareAnywhere</span>
         </div>
 
