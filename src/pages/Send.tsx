@@ -21,7 +21,7 @@ const Send = () => {
     if (selectedFiles) {
       const fileArray = Array.from(selectedFiles);
       setFiles(fileArray);
-      
+
       // Upload files and generate code
       const result = await uploadFiles(fileArray, customCode || undefined, 24);
       if (result) {
@@ -35,7 +35,7 @@ const Send = () => {
     e.preventDefault();
     setIsDragging(false);
     handleFileSelect(e.dataTransfer.files);
-  }, [customCode, uploadFiles]);
+  }, [handleFileSelect]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -158,11 +158,10 @@ const Send = () => {
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
-                className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${
-                  isDragging
+                className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 ${isDragging
                     ? "border-primary bg-primary/5 scale-[1.02]"
                     : "border-border hover:border-primary/50 hover:bg-muted/30"
-                }`}
+                  }`}
               >
                 <Upload className="w-16 h-16 mx-auto mb-4 text-primary" />
                 <h3 className="text-xl font-semibold mb-2">

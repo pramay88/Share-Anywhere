@@ -5,15 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/useAuth";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { useFileTransfer } from "@/hooks/useFileTransfer";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const ReceiveContent = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, signOut } = useAuth();
-  const { getTransferByCode, downloadFile } = useFileTransfer();
+  const { user, signOut } = useFirebaseAuth();
+  const { getTransferByShareCode, downloadFile } = useFileTransfer();
   const [code, setCode] = useState(searchParams.get("code") || "");
   const [transfer, setTransfer] = useState<any>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -31,7 +31,7 @@ const ReceiveContent = () => {
     }
 
     setIsConnecting(true);
-    const transferData = await getTransferByCode(code);
+    const transferData = await getTransferByShareCode(code);
     setIsConnecting(false);
 
     if (transferData) {
@@ -43,11 +43,11 @@ const ReceiveContent = () => {
   const handleDownloadAll = async () => {
     if (!transfer) return;
 
-    for (const file of transfer.transfer_files) {
+    for (const file of transfer.files) {
       await downloadFile(
-        transfer.id,
+        transfer.transfer.id,
         file.id,
-        file.storage_path,
+        file.cloudinary_public_id,
         file.original_name
       );
     }
@@ -55,7 +55,12 @@ const ReceiveContent = () => {
 
   const handleDownloadSingle = async (file: any) => {
     if (!transfer) return;
-    await downloadFile(transfer.id, file.id, file.storage_path, file.original_name);
+    await downloadFile(
+      transfer.transfer.id,
+      file.id,
+      file.cloudinary_public_id,
+      file.original_name
+    );
   };
 
   return (
@@ -131,11 +136,11 @@ const ReceiveContent = () => {
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="font-semibold">Available Files:</h3>
                   <span className="text-sm text-muted-foreground">
-                    {transfer.transfer_files.length} file(s)
+                    {transfer.files.length} file(s)
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {transfer.transfer_files.map((file: any) => (
+                  {transfer.files.map((file: any) => (
                     <div
                       key={file.id}
                       className="flex justify-between items-center text-sm bg-card p-3 rounded-md"
@@ -199,8 +204,8 @@ const ReceiveContent = () => {
 
 const Receive = () => {
   return (
-      <ReceiveContent />
-    
+    <ReceiveContent />
+
   );
 };
 

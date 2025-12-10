@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Transfers collection
+    match /transfers/{transferId} {
+      // Anyone can create a transfer (for anonymous uploads)
+      allow create: if true;
+      
+      // Anyone can read transfers (needed to download files with share code)
+      allow read: if true;
+      
+      // Only owner can update/delete (if authenticated)
+      allow update, delete: if request.auth != null && 
+                              (resource.data.owner_id == null || 
+                               request.auth.uid == resource.data.owner_id);
+      
+      // Files subcollection
+      match /files/{fileId} {
+        // Anyone can read files (for downloads)
+        allow read: if true;
+        
+        // Anyone can create files (for uploads)
+        allow create: if true;
+        
+        // Only authenticated users can delete
+        allow delete: if request.auth != null;
+      }
+    }
+    
+    // Download logs collection
+    match /download_logs/{logId} {
+      // Anyone can create download logs
+      allow create: if true;
+      
+      // Only authenticated users can read their own logs
+      allow read: if request.auth != null && 
+                     (resource.data.downloaded_by == null || 
+                      request.auth.uid == resource.data.downloaded_by);
+    }
+  }
+}

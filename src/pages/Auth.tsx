@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { signUp, signIn } from "@/integrations/firebase/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { ArrowLeft, Mail, Lock, User } from "lucide-react";
 import { z } from "zod";
+import { logError, getUserFriendlyErrorMessage } from "@/lib/errorHandling";
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -33,29 +34,20 @@ const Auth = () => {
 
     try {
       const validated = signUpSchema.parse({ email, password, displayName });
-      
-      const { data, error } = await supabase.auth.signUp({
-        email: validated.email,
-        password: validated.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            display_name: validated.displayName || email.split("@")[0],
-          },
-        },
-      });
 
-      if (error) throw error;
+      const user = await signUp(validated.email, validated.password);
 
-      if (data.user) {
+      if (user) {
         toast.success("Account created! You're now signed in.");
         navigate("/");
       }
     } catch (error: any) {
+      logError(error, 'handleSignUp');
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
       } else {
-        toast.error(error.message || "Failed to sign up");
+        const friendlyMessage = getUserFriendlyErrorMessage(error);
+        toast.error(friendlyMessage);
       }
     } finally {
       setLoading(false);
@@ -69,22 +61,19 @@ const Auth = () => {
     try {
       const validated = signInSchema.parse({ email, password });
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: validated.email,
-        password: validated.password,
-      });
+      const user = await signIn(validated.email, validated.password);
 
-      if (error) throw error;
-
-      if (data.user) {
+      if (user) {
         toast.success("Welcome back!");
         navigate("/");
       }
     } catch (error: any) {
+      logError(error, 'handleSignIn');
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
       } else {
-        toast.error(error.message || "Failed to sign in");
+        const friendlyMessage = getUserFriendlyErrorMessage(error);
+        toast.error(friendlyMessage);
       }
     } finally {
       setLoading(false);
