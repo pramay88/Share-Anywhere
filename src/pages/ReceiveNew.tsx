@@ -66,14 +66,14 @@ const ReceiveContent = () => {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex-1 flex items-center justify-center p-4 md:p-6">
         <div className="w-full max-w-xl">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Receive Files & Text</h1>
-            <p className="text-muted-foreground">Enter the share code to download files or view text</p>
+          <div className="mb-4 md:mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Receive Files & Text</h1>
+            <p className="text-sm md:text-base text-muted-foreground">Enter the share code to download files or view text</p>
           </div>
 
-          <Card className="p-6">
+          <Card className="p-4 md:p-6">
             {!transfer ? (
               <div className="space-y-6">
                 <div>

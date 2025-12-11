@@ -11,16 +11,16 @@ const QuickShare = () => {
         <div className="min-h-screen flex flex-col">
             <Header />
 
-            <div className="flex-1 flex items-center justify-center p-6">
+            <div className="flex-1 flex items-center justify-center p-4 md:p-6">
                 <div className="w-full max-w-xl">
-                    <div className="mb-6">
-                        <h1 className="text-3xl font-bold tracking-tight mb-2">Quick Share</h1>
-                        <p className="text-muted-foreground">
+                    <div className="mb-4 md:mb-6">
+                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Quick Share</h1>
+                        <p className="text-sm md:text-base text-muted-foreground">
                             Share text, links, or code snippets instantly
                         </p>
                     </div>
 
-                    <Card className="p-6">
+                    <Card className="p-4 md:p-6">
                         <QuickShareForm />
                     </Card>
 

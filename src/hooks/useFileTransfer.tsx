@@ -194,6 +194,9 @@ export const useFileTransfer = () => {
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
       return null;
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
     }
   };
 
