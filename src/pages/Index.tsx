@@ -23,11 +23,11 @@ const Index = () => {
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="space-y-4">
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-              Share Files Instantly
+              Share Files & Text Instantly
             </h1>
 
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Transfer files up to 50MB with just a code or QR scan.
+              Transfer files up to 50MB or share text snippets with just a code or QR scan.
               No signup required.
             </p>
           </div>
@@ -45,10 +45,18 @@ const Index = () => {
             <Button
               size="lg"
               variant="outline"
+              onClick={() => navigate("/quickshare")}
+            >
+              <Zap className="mr-2 h-4 w-4" />
+              Quick Share Text
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
               onClick={() => navigate("/receive")}
             >
               <Download className="mr-2 h-4 w-4" />
-              Receive Files
+              Receive
             </Button>
           </div>
 

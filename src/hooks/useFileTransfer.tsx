@@ -194,6 +194,138 @@ export const useFileTransfer = () => {
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
       return null;
+    }
+  };
+
+  const uploadText = async (
+    text: string,
+    customCode?: string,
+    expiresInHours?: number
+  ): Promise<{ shareCode: string; transferId: string } | null> => {
+    try {
+      // Check if offline
+      if (isOffline()) {
+        toast.error('You are offline. Please check your internet connection.');
+        return null;
+      }
+
+      setUploading(true);
+      setUploadProgress(0);
+
+      // Import text validation (dynamic to avoid circular deps)
+      const { validateTextContent, getTextStats, detectLanguageHint } = await import('@/lib/textValidation');
+
+      // Validate text
+      const validation = validateTextContent(text);
+      if (!validation.valid) {
+        toast.error(validation.error || 'Invalid text content');
+        return null;
+      }
+
+      // Validate custom code if provided
+      if (customCode) {
+        const codeValidation = validateShareCode(customCode);
+        if (!codeValidation.valid) {
+          toast.error(codeValidation.error || 'Invalid custom code');
+          return null;
+        }
+      }
+
+      // Get text stats
+      const stats = getTextStats(text);
+      const languageHint = detectLanguageHint(text);
+
+      toast.info(`Sharing text (${stats.characters} characters)`);
+
+      // Get current user
+      const user = getCurrentUser();
+
+      // Generate or use custom code
+      let shareCode: string;
+      if (customCode && customCode.length >= 6) {
+        // Validate custom code is unique with retry
+        const checkCodeUnique = async () => {
+          const isUnique = await isShareCodeUnique(customCode);
+          if (!isUnique) {
+            throw new Error('This code is already in use. Please choose another.');
+          }
+          return true;
+        };
+
+        await retryWithBackoff(checkCodeUnique, {
+          maxAttempts: 2,
+          delayMs: 500,
+        });
+
+        shareCode = customCode.toUpperCase();
+      } else {
+        // Generate unique code with retry
+        const generateUniqueCode = async () => {
+          let code = generateShareCode();
+          let attempts = 0;
+          while (!(await isShareCodeUnique(code)) && attempts < 10) {
+            code = generateShareCode();
+            attempts++;
+          }
+          if (attempts >= 10) {
+            throw new Error('Failed to generate unique code. Please try again.');
+          }
+          return code;
+        };
+
+        shareCode = await retryWithBackoff(generateUniqueCode, {
+          maxAttempts: 3,
+          delayMs: 1000,
+          onRetry: (attempt) => {
+            toast.loading(`Generating code (attempt ${attempt})...`);
+          },
+        });
+      }
+
+      // Calculate expiration
+      const expiresAt = expiresInHours
+        ? new Date(Date.now() + expiresInHours * 60 * 60 * 1000)
+        : null;
+
+      // Create text transfer record with retry and timeout
+      const createTextTransferRecord = async () => {
+        // Build metadata object, only including language_hint if defined
+        const metadata: { character_count: number; language_hint?: string } = {
+          character_count: stats.characters,
+        };
+
+        // Only add language_hint if it's defined
+        if (languageHint) {
+          metadata.language_hint = languageHint;
+        }
+
+        return await createTransfer(
+          shareCode,
+          user?.uid || null,
+          expiresAt,
+          'text',
+          text,
+          metadata
+        );
+      };
+
+      const transferId = await withTimeout(
+        retryWithBackoff(createTextTransferRecord, {
+          maxAttempts: 3,
+          delayMs: 1000,
+        }),
+        15000,
+        'Creating transfer timed out. Please try again.'
+      );
+
+      setUploadProgress(100);
+      toast.success('Text shared successfully!');
+      return { shareCode, transferId };
+    } catch (error: any) {
+      logError(error, 'uploadText');
+      const friendlyMessage = getUserFriendlyErrorMessage(error);
+      toast.error(friendlyMessage);
+      return null;
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -320,6 +452,7 @@ export const useFileTransfer = () => {
 
   return {
     uploadFiles,
+    uploadText,
     getTransferByShareCode,
     downloadFile,
     uploading,

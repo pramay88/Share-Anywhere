@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import Index from "./pages/Index";
 import Send from "./pages/Send";
 import Receive from "./pages/ReceiveNew";
+import QuickShare from "./pages/QuickShare";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -42,6 +43,7 @@ const AppContent = () => {
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/send" element={<Send />} />
+        <Route path="/quickshare" element={<QuickShare />} />
         <Route path="/receive" element={<Receive />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />

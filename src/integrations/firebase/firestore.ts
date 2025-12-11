@@ -16,6 +16,12 @@ export interface Transfer {
     id: string;
     owner_id: string | null;
     share_code: string;
+    content_type: 'files' | 'text'; // Type of content being shared
+    text_content?: string; // For text transfers
+    text_metadata?: {
+        character_count: number;
+        language_hint?: string;
+    };
     created_at: Timestamp;
     expires_at: Timestamp | null;
 }
@@ -68,15 +74,27 @@ export async function isShareCodeUnique(code: string): Promise<boolean> {
 export async function createTransfer(
     shareCode: string,
     ownerId: string | null,
-    expiresAt: Date | null
+    expiresAt: Date | null,
+    contentType: 'files' | 'text' = 'files',
+    textContent?: string,
+    textMetadata?: { character_count: number; language_hint?: string }
 ): Promise<string> {
     const transfersRef = collection(db, 'transfers');
-    const transferData = {
+    const transferData: any = {
         owner_id: ownerId,
         share_code: shareCode.toUpperCase(),
+        content_type: contentType,
         created_at: serverTimestamp(),
         expires_at: expiresAt ? Timestamp.fromDate(expiresAt) : null,
     };
+
+    // Add text-specific fields if this is a text transfer
+    if (contentType === 'text' && textContent) {
+        transferData.text_content = textContent;
+        transferData.text_metadata = textMetadata || {
+            character_count: textContent.length,
+        };
+    }
 
     const docRef = await addDoc(transfersRef, transferData);
     return docRef.id;

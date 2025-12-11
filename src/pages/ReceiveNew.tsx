@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useFileTransfer } from "@/hooks/useFileTransfer";
 import { Header } from "@/components/Header";
+import { QuickReceive } from "@/components/QuickReceive";
 
 const ReceiveContent = () => {
   const navigate = useNavigate();
@@ -68,8 +69,8 @@ const ReceiveContent = () => {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-xl">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Receive Files</h1>
-            <p className="text-muted-foreground">Enter the share code to download files</p>
+            <h1 className="text-3xl font-bold tracking-tight mb-2">Receive Files & Text</h1>
+            <p className="text-muted-foreground">Enter the share code to download files or view text</p>
           </div>
 
           <Card className="p-6">
@@ -118,45 +119,56 @@ const ReceiveContent = () => {
                   <span className="text-lg font-semibold">Transfer Found!</span>
                 </div>
 
-                <div className="rounded-lg border bg-card p-4">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-semibold text-sm">Available Files</h3>
-                    <span className="text-sm text-muted-foreground">
-                      {transfer.files.length} file(s)
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {transfer.files.map((file: any) => (
-                      <div
-                        key={file.id}
-                        className="flex justify-between items-center text-sm bg-background p-3 rounded-md"
-                      >
-                        <span className="truncate flex-1">{file.original_name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-muted-foreground">
-                            {(file.file_size / 1024 / 1024).toFixed(2)} MB
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownloadSingle(file)}
-                          >
-                            <Download className="h-3 w-3" />
-                          </Button>
-                        </div>
+                {/* Check if this is a text transfer or file transfer */}
+                {transfer.transfer.content_type === 'text' ? (
+                  <QuickReceive
+                    textContent={transfer.transfer.text_content || ''}
+                    metadata={transfer.transfer.text_metadata}
+                    shareCode={code}
+                  />
+                ) : (
+                  <>
+                    <div className="rounded-lg border bg-card p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-semibold text-sm">Available Files</h3>
+                        <span className="text-sm text-muted-foreground">
+                          {transfer.files.length} file(s)
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="space-y-2">
+                        {transfer.files.map((file: any) => (
+                          <div
+                            key={file.id}
+                            className="flex justify-between items-center text-sm bg-background p-3 rounded-md"
+                          >
+                            <span className="truncate flex-1">{file.original_name}</span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-muted-foreground">
+                                {(file.file_size / 1024 / 1024).toFixed(2)} MB
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadSingle(file)}
+                              >
+                                <Download className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-                <Button
-                  size="default"
-                  onClick={handleDownloadAll}
-                  className="w-full h-11"
-                >
-                  <Download className="mr-2 h-5 w-5" />
-                  Download All Files
-                </Button>
+                    <Button
+                      size="default"
+                      onClick={handleDownloadAll}
+                      className="w-full h-11"
+                    >
+                      <Download className="mr-2 h-5 w-5" />
+                      Download All Files
+                    </Button>
+                  </>
+                )}
 
                 <div className="text-center pt-2">
                   <Button
