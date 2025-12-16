@@ -4,6 +4,11 @@
 
 /* shadcn/ui Inspired Design System with Orange Accent */
 
+/* Prevent layout shift from scrollbar */
+html {
+  scrollbar-gutter: stable;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
