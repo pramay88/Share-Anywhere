@@ -1,4 +1,3 @@
-```
 /**
  * OfflineShare Page - Main component for offline/nearby file sharing
  */
@@ -33,7 +32,7 @@ const OfflineShare = () => {
     const [receiverProgress, setReceiverProgress] = useState(0);
     const [receiverSpeed, setReceiverSpeed] = useState(0);
     const [receiverStatus, setReceiverStatus] = useState<'idle' | 'waiting' | 'receiving' | 'success' | 'error'>('idle');
-    
+
     // Use refs to store callbacks to avoid closure issues
     const acceptCallbackRef = useRef<(() => void) | null>(null);
     const rejectCallbackRef = useRef<(() => void) | null>(null);
@@ -74,7 +73,7 @@ const OfflineShare = () => {
         setIncomingSenderName(senderDevice?.name || conn.peer);
         setIsReceiving(true);
         setReceiverStatus('waiting');
-        
+
         console.log('📨 Incoming connection, starting receiveFile...');
 
         // Start listening for transfer request
@@ -97,7 +96,7 @@ const OfflineShare = () => {
                     // Small delay to ensure accept message is sent before chunks start
                     await new Promise(resolve => setTimeout(resolve, 300));
                 };
-                
+
                 rejectCallbackRef.current = () => {
                     console.log('❌ User rejected transfer');
                     reject();
@@ -105,7 +104,7 @@ const OfflineShare = () => {
                     setIsReceiving(false);
                     setShowIncomingModal(false);
                 };
-                
+
                 // Show modal AFTER storing callbacks
                 setShowIncomingModal(true);
                 setStatus('busy');
@@ -113,7 +112,7 @@ const OfflineShare = () => {
             // onProgress callback
             (prog, spd) => {
                 // Update receiver progress
-                console.log(`📥 Receiving: ${ prog }% at ${ spd } bytes / sec`);
+                console.log(`📥 Receiving: ${prog}% at ${spd} bytes / sec`);
                 setReceiverProgress(prog);
                 setReceiverSpeed(spd);
             }
@@ -455,7 +454,7 @@ const OfflineShare = () => {
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-muted-foreground">{receiverProgress}%</span>
                                     <span className="text-muted-foreground">
-                                        {receiverSpeed > 0 && `${ (receiverSpeed / (1024 * 1024)).toFixed(2) } MB / s`}
+                                        {receiverSpeed > 0 && `${(receiverSpeed / (1024 * 1024)).toFixed(2)} MB / s`}
                                     </span>
                                 </div>
                             </div>
