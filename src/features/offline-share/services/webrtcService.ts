@@ -6,18 +6,22 @@
 import Peer, { DataConnection } from 'peerjs';
 import type { ConnectionPool, PeerConnection, ConnectionStatus } from '../types';
 
-// PeerJS configuration
+// PeerJS configuration - Using official PeerJS cloud server
 const PEERJS_CONFIG = {
-    host: 'peerjs-server.herokuapp.com',
-    port: 443,
-    path: '/',
-    secure: true,
+    // Use PeerJS cloud server (free, reliable)
+    // Alternative: host your own PeerJS server for production
     config: {
         iceServers: [
+            // Google STUN servers
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
         ],
     },
+    // Enable debug for troubleshooting (disable in production)
+    debug: 2,
 };
 
 // ============================================================================

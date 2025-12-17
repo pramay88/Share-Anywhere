@@ -81,6 +81,28 @@ export async function sendFile(
     file: File,
     onProgress?: (progress: number, speed: number) => void
 ): Promise<void> {
+    // Ensure connection is fully open before sending
+    if (!connection.open) {
+        console.log('⏳ Waiting for connection to open...');
+        await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Connection timeout - not opened in time'));
+            }, 10000);
+
+            if (connection.open) {
+                clearTimeout(timeout);
+                resolve();
+            } else {
+                connection.on('open', () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+            }
+        });
+    }
+
+    console.log('📤 Starting file transfer:', file.name);
+
     const transferId = generateTransferId();
     const chunkSize = DEFAULT_CHUNK_SIZE;
     const totalChunks = Math.ceil(file.size / chunkSize);
@@ -102,8 +124,8 @@ export async function sendFile(
 
     connection.send(metadataMessage);
 
-    // Wait for receiver to be ready
-    await waitForAck(connection, transferId);
+    // Small delay to ensure metadata is received
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     // Send chunks
     let offset = 0;
@@ -150,27 +172,7 @@ export async function sendFile(
     };
 
     connection.send(completeMessage);
-}
-
-/**
- * Wait for acknowledgment from receiver
- */
-function waitForAck(connection: DataConnection, transferId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            reject(new Error('ACK timeout'));
-        }, 10000);
-
-        const handler = (data: any) => {
-            if (data.type === 'ack' && data.transferId === transferId) {
-                clearTimeout(timeout);
-                connection.off('data', handler);
-                resolve();
-            }
-        };
-
-        connection.on('data', handler);
-    });
+    console.log('✅ File transfer complete');
 }
 
 // ============================================================================
@@ -202,13 +204,7 @@ export async function receiveFile(
                         totalChunks = message.totalChunks!;
                         transferId = message.transferId;
                         receivedChunks = new Array(totalChunks);
-
-                        // Send ACK
-                        const ackMessage: TransferMessage = {
-                            type: 'ack',
-                            transferId,
-                        };
-                        connection.send(ackMessage);
+                        console.log(`📥 Receiving file: ${metadata.name} (${totalChunks} chunks)`);
                         break;
 
                     case 'chunk':

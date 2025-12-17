@@ -58,7 +58,26 @@ const OfflineShare = () => {
         const senderDevice = devices.find((d) => d.id === conn.peer);
         setIncomingConnection(conn);
         setIncomingSenderName(senderDevice?.name || conn.peer);
+
+        // Start receiving file immediately (before user accepts)
+        // This ensures we're listening when sender starts transmitting
+        receiveFile(conn)
+            .then(() => {
+                // File received successfully
+                setIncomingConnection(null);
+                setShowIncomingModal(false);
+                setStatus('online');
+            })
+            .catch((error) => {
+                console.error('Failed to receive file:', error);
+                setIncomingConnection(null);
+                setShowIncomingModal(false);
+                setStatus('online');
+            });
+
+        // Show modal to user
         setShowIncomingModal(true);
+        setStatus('busy');
     });
 
     // Handle file selection
@@ -97,23 +116,9 @@ const OfflineShare = () => {
 
     // Handle accept incoming transfer
     const handleAcceptTransfer = async () => {
-        if (!incomingConnection) return;
-
+        // Transfer already started automatically
+        // Just close the modal
         setShowIncomingModal(false);
-
-        try {
-            // Set status to busy
-            await setStatus('busy');
-
-            // Receive file
-            await receiveFile(incomingConnection);
-
-            // Reset status
-            await setStatus('online');
-        } catch (error) {
-            console.error('Failed to receive file:', error);
-            await setStatus('online');
-        }
     };
 
     // Handle decline incoming transfer
@@ -123,6 +128,7 @@ const OfflineShare = () => {
         }
         setShowIncomingModal(false);
         setIncomingConnection(null);
+        setStatus('online');
     };
 
     // Loading state

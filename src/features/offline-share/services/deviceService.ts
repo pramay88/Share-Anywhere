@@ -77,11 +77,21 @@ export function setDeviceName(name: string): void {
  */
 export async function detectNetworkFingerprint(): Promise<string> {
     try {
+        // DEVELOPMENT MODE: Use shared fingerprint for testing
+        // This allows localhost and port-forwarded devices to discover each other
+        const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost';
+
+        if (isDevelopment) {
+            console.log('🔧 Development mode: Using shared network fingerprint');
+            return 'dev_network'; // All dev devices use same fingerprint
+        }
+
+        // PRODUCTION: Detect actual network
         const localIP = await getLocalIP();
 
         if (!localIP) {
-            // Fallback: use a random fingerprint that changes per session
-            return `session_${Date.now()}`;
+            // Fallback: use a shared fingerprint for this session
+            return 'shared_network';
         }
 
         // Extract network prefix (e.g., "192.168.1" from "192.168.1.100")
@@ -93,7 +103,7 @@ export async function detectNetworkFingerprint(): Promise<string> {
         return localIP;
     } catch (error) {
         console.error('Error detecting network:', error);
-        return `session_${Date.now()}`;
+        return 'shared_network';
     }
 }
 
