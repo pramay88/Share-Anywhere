@@ -59,11 +59,31 @@ const OfflineShare = () => {
         setIncomingConnection(conn);
         setIncomingSenderName(senderDevice?.name || conn.peer);
 
-        // Start receiving file immediately (before user accepts)
-        // This ensures we're listening when sender starts transmitting
-        receiveFile(conn)
-            .then(() => {
-                // File received successfully
+        // Start listening for file metadata
+        receiveFile(
+            conn,
+            (metadata) => {
+                // Metadata received - show modal to user
+                console.log('📥 Incoming file:', metadata.name);
+                setIncomingTransferId(metadata.transferId); // Assuming metadata contains transferId
+                setShowIncomingModal(true);
+                setStatus('busy');
+            },
+            (prog, spd) => {
+                // Progress callback - not used yet
+            }
+        )
+            .then(({ file, metadata }) => {
+                // File received successfully - download it
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = metadata.name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
                 setIncomingConnection(null);
                 setShowIncomingModal(false);
                 setStatus('online');
@@ -74,10 +94,6 @@ const OfflineShare = () => {
                 setShowIncomingModal(false);
                 setStatus('online');
             });
-
-        // Show modal to user
-        setShowIncomingModal(true);
-        setStatus('busy');
     });
 
     // Handle file selection
@@ -99,7 +115,7 @@ const OfflineShare = () => {
             // Connect to device
             const conn = await connectToDevice(deviceId);
 
-            // Send file
+            // Send file (will wait for receiver to accept)
             await sendFile(selectedFile, conn);
 
             // Disconnect
@@ -116,16 +132,27 @@ const OfflineShare = () => {
 
     // Handle accept incoming transfer
     const handleAcceptTransfer = async () => {
-        // Transfer already started automatically
-        // Just close the modal
+        if (!incomingConnection) return;
+
+        // Send acceptance to sender
+        const { acceptTransfer } = await import('../features/offline-share/services/transferService');
+        acceptTransfer(incomingConnection, incomingTransferId);
+
+        // Close modal - transfer will continue automatically
         setShowIncomingModal(false);
     };
 
     // Handle decline incoming transfer
-    const handleDeclineTransfer = () => {
-        if (incomingConnection) {
-            incomingConnection.close();
-        }
+    const handleDeclineTransfer = async () => {
+        if (!incomingConnection) return;
+
+        // Send decline to sender
+        const { declineTransfer } = await import('../features/offline-share/services/transferService');
+        declineTransfer(incomingConnection, incomingTransferId);
+
+        // Close connection
+        incomingConnection.close();
+
         setShowIncomingModal(false);
         setIncomingConnection(null);
         setStatus('online');

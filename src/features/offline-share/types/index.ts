@@ -113,6 +113,8 @@ export interface WebRTCSignal {
 export type TransferMessageType =
     | 'metadata'
     | 'chunk'
+    | 'accept'
+    | 'decline'
     | 'ack'
     | 'complete'
     | 'error'
