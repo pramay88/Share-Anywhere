@@ -26,6 +26,8 @@ const OfflineShare = () => {
     const [incomingFileName, setIncomingFileName] = useState('');
     const [incomingFileSize, setIncomingFileSize] = useState<number>(0);
     const [isReceiving, setIsReceiving] = useState(false);
+    const [senderStatus, setSenderStatus] = useState<'idle' | 'connecting' | 'waiting' | 'transferring' | 'success' | 'error'>('idle');
+    const [senderError, setSenderError] = useState<string>('');
 
     // Hooks
     const {
@@ -125,6 +127,8 @@ const OfflineShare = () => {
         const files = e.target.files;
         if (files && files.length > 0) {
             setSelectedFile(files[0]);
+            setSenderStatus('idle');
+            setSenderError('');
         }
     };
 
@@ -133,24 +137,47 @@ const OfflineShare = () => {
         if (!selectedFile) return;
 
         try {
-            // Set status to busy
+            // Reset states
+            setSenderError('');
+
+            // Step 1: Connecting
+            setSenderStatus('connecting');
             await setStatus('busy');
 
-            // Connect to device
+            // Step 2: Connect to device
             const conn = await connectToDevice(deviceId);
 
-            // Send file
+            // Step 3: Waiting for receiver to accept
+            setSenderStatus('waiting');
+
+            // Step 4: Send file (this will wait for acceptance internally)
+            setSenderStatus('transferring');
             await sendFile(selectedFile, conn);
+
+            // Step 5: Success
+            setSenderStatus('success');
 
             // Disconnect
             disconnect();
 
-            // Reset
-            setSelectedFile(null);
-            await setStatus('online');
+            // Reset after 3 seconds
+            setTimeout(() => {
+                setSelectedFile(null);
+                setSenderStatus('idle');
+                setStatus('online');
+            }, 3000);
+
         } catch (error) {
             console.error('Failed to send file:', error);
+            setSenderStatus('error');
+            setSenderError(error instanceof Error ? error.message : 'Transfer failed');
             await setStatus('online');
+
+            // Reset error after 5 seconds
+            setTimeout(() => {
+                setSenderStatus('idle');
+                setSenderError('');
+            }, 5000);
         }
     };
 
@@ -259,7 +286,7 @@ const OfflineShare = () => {
                     )}
 
                     {/* Selected File */}
-                    {selectedFile && transferStatus === 'idle' && (
+                    {selectedFile && senderStatus === 'idle' && (
                         <Card className="p-4 mb-6">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -279,8 +306,36 @@ const OfflineShare = () => {
                         </Card>
                     )}
 
-                    {/* Transfer Progress */}
-                    {transferStatus !== 'idle' && !isReceiving && (
+                    {/* Sender Status - Connecting */}
+                    {senderStatus === 'connecting' && (
+                        <Card className="p-6 mb-6">
+                            <div className="text-center space-y-3">
+                                <div className="animate-spin mx-auto h-8 w-8 border-2 border-primary border-t-transparent rounded-full" />
+                                <p className="font-medium">Connecting to device...</p>
+                                <p className="text-sm text-muted-foreground">
+                                    Establishing secure connection
+                                </p>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Sender Status - Waiting for Acceptance */}
+                    {senderStatus === 'waiting' && (
+                        <Card className="p-6 mb-6">
+                            <div className="text-center space-y-3">
+                                <div className="animate-pulse mx-auto h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
+                                    <span className="text-2xl">⏳</span>
+                                </div>
+                                <p className="font-medium">Waiting for receiver to accept...</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {selectedFile?.name}
+                                </p>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Transfer Progress - Transferring */}
+                    {senderStatus === 'transferring' && !isReceiving && (
                         <TransferProgress
                             fileName={selectedFile?.name || 'File'}
                             progress={progress}
@@ -290,8 +345,52 @@ const OfflineShare = () => {
                         />
                     )}
 
+                    {/* Sender Status - Success */}
+                    {senderStatus === 'success' && (
+                        <Card className="p-6 mb-6">
+                            <div className="text-center space-y-3">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                    <span className="text-2xl">✓</span>
+                                </div>
+                                <p className="font-medium text-green-600 dark:text-green-400">
+                                    Transfer complete!
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {selectedFile?.name} sent successfully
+                                </p>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Sender Status - Error */}
+                    {senderStatus === 'error' && (
+                        <Card className="p-6 mb-6 border-destructive">
+                            <div className="text-center space-y-3">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                                    <span className="text-2xl">✗</span>
+                                </div>
+                                <p className="font-medium text-destructive">
+                                    Transfer failed
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {senderError || 'Please try again'}
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setSenderStatus('idle');
+                                        setSenderError('');
+                                    }}
+                                >
+                                    Try Again
+                                </Button>
+                            </div>
+                        </Card>
+                    )}
+
                     {/* Device List */}
-                    {selectedFile && transferStatus === 'idle' && (
+                    {selectedFile && senderStatus === 'idle' && (
                         <DeviceList
                             devices={devices}
                             onSendToDevice={handleSendToDevice}
