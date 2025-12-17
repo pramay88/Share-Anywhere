@@ -25,6 +25,7 @@ const OfflineShare = () => {
     const [incomingSenderName, setIncomingSenderName] = useState('');
     const [incomingFileName, setIncomingFileName] = useState('');
     const [incomingFileSize, setIncomingFileSize] = useState<number>(0);
+    const [isReceiving, setIsReceiving] = useState(false);
 
     // Hooks
     const {
@@ -60,6 +61,7 @@ const OfflineShare = () => {
         const senderDevice = devices.find((d) => d.id === conn.peer);
         setIncomingConnection(conn);
         setIncomingSenderName(senderDevice?.name || conn.peer);
+        setIsReceiving(true);
 
         // Start listening for transfer request
         receiveFile(
@@ -103,6 +105,7 @@ const OfflineShare = () => {
                 setIncomingConnection(null);
                 setShowIncomingModal(false);
                 setStatus('online');
+                setIsReceiving(false);
                 delete (window as any).__pendingTransferAccept;
                 delete (window as any).__pendingTransferReject;
             })
@@ -111,6 +114,7 @@ const OfflineShare = () => {
                 setIncomingConnection(null);
                 setShowIncomingModal(false);
                 setStatus('online');
+                setIsReceiving(false);
                 delete (window as any).__pendingTransferAccept;
                 delete (window as any).__pendingTransferReject;
             });
@@ -276,7 +280,7 @@ const OfflineShare = () => {
                     )}
 
                     {/* Transfer Progress */}
-                    {transferStatus !== 'idle' && (
+                    {transferStatus !== 'idle' && !isReceiving && (
                         <TransferProgress
                             fileName={selectedFile?.name || 'File'}
                             progress={progress}
