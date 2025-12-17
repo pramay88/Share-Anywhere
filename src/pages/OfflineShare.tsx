@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { Header } from '@/components/Header';
 import { useDeviceDiscovery } from '../features/offline-share/hooks/useDeviceDiscovery';
 import { useWebRTC } from '../features/offline-share/hooks/useWebRTC';
@@ -28,6 +29,9 @@ const OfflineShare = () => {
     const [isReceiving, setIsReceiving] = useState(false);
     const [senderStatus, setSenderStatus] = useState<'idle' | 'connecting' | 'waiting' | 'transferring' | 'success' | 'error'>('idle');
     const [senderError, setSenderError] = useState<string>('');
+    const [receiverProgress, setReceiverProgress] = useState(0);
+    const [receiverSpeed, setReceiverSpeed] = useState(0);
+    const [receiverStatus, setReceiverStatus] = useState<'idle' | 'waiting' | 'receiving' | 'success' | 'error'>('idle');
 
     // Hooks
     const {
@@ -64,6 +68,7 @@ const OfflineShare = () => {
         setIncomingConnection(conn);
         setIncomingSenderName(senderDevice?.name || conn.peer);
         setIsReceiving(true);
+        setReceiverStatus('waiting');
 
         // Start listening for transfer request
         receiveFile(
@@ -81,42 +86,71 @@ const OfflineShare = () => {
                 // Store accept/reject callbacks for modal buttons
                 (window as any).__pendingTransferAccept = async () => {
                     accept();
+                    setReceiverStatus('receiving');
                     // Small delay to ensure accept message is sent before chunks start
                     await new Promise(resolve => setTimeout(resolve, 300));
                 };
-                (window as any).__pendingTransferReject = reject;
+                (window as any).__pendingTransferReject = () => {
+                    reject();
+                    setReceiverStatus('idle');
+                    setIsReceiving(false);
+                };
             },
             // onProgress callback
             (prog, spd) => {
-                // Update progress during transfer
-                // Note: This is handled by useFileTransfer hook
+                // Update receiver progress
+                console.log(`📥 Receiving: ${prog}% at ${spd} bytes/sec`);
+                setReceiverProgress(prog);
+                setReceiverSpeed(spd);
             }
         )
             .then(({ file, metadata }) => {
-                // File received successfully - trigger download
-                const url = URL.createObjectURL(file);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = metadata.name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                console.log('✅ File received, triggering download:', metadata.name);
 
-                // Clean up
-                setIncomingConnection(null);
-                setShowIncomingModal(false);
-                setStatus('online');
-                setIsReceiving(false);
-                delete (window as any).__pendingTransferAccept;
-                delete (window as any).__pendingTransferReject;
+                // File received successfully - trigger download
+                try {
+                    const url = URL.createObjectURL(file);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = metadata.name;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+
+                    // Clean up after a short delay
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+
+                    setReceiverStatus('success');
+
+                    // Auto-reset after 3 seconds
+                    setTimeout(() => {
+                        setIncomingConnection(null);
+                        setShowIncomingModal(false);
+                        setStatus('online');
+                        setIsReceiving(false);
+                        setReceiverStatus('idle');
+                        setReceiverProgress(0);
+                        setReceiverSpeed(0);
+                        delete (window as any).__pendingTransferAccept;
+                        delete (window as any).__pendingTransferReject;
+                    }, 3000);
+                } catch (downloadError) {
+                    console.error('Download error:', downloadError);
+                    setReceiverStatus('error');
+                }
             })
             .catch((error) => {
                 console.error('Failed to receive file:', error);
+                setReceiverStatus('error');
                 setIncomingConnection(null);
                 setShowIncomingModal(false);
                 setStatus('online');
                 setIsReceiving(false);
+                setReceiverProgress(0);
+                setReceiverSpeed(0);
                 delete (window as any).__pendingTransferAccept;
                 delete (window as any).__pendingTransferReject;
             });
@@ -385,6 +419,61 @@ const OfflineShare = () => {
                                 >
                                     Try Again
                                 </Button>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Receiver Progress - Receiving */}
+                    {receiverStatus === 'receiving' && (
+                        <Card className="p-6 mb-6">
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="font-semibold">{incomingFileName}</p>
+                                        <p className="text-sm text-muted-foreground">Receiving...</p>
+                                    </div>
+                                </div>
+                                <Progress value={receiverProgress} className="w-full" />
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">{receiverProgress}%</span>
+                                    <span className="text-muted-foreground">
+                                        {receiverSpeed > 0 && `${(receiverSpeed / (1024 * 1024)).toFixed(2)} MB/s`}
+                                    </span>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Receiver Status - Success */}
+                    {receiverStatus === 'success' && (
+                        <Card className="p-6 mb-6">
+                            <div className="text-center space-y-3">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                    <span className="text-2xl">✓</span>
+                                </div>
+                                <p className="font-medium text-green-600 dark:text-green-400">
+                                    File received!
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    {incomingFileName} downloaded successfully
+                                </p>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Receiver Status - Error */}
+                    {receiverStatus === 'error' && (
+                        <Card className="p-6 mb-6 border-destructive">
+                            <div className="text-center space-y-3">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                                    <span className="text-2xl">✗</span>
+                                </div>
+                                <p className="font-medium text-destructive">
+                                    Transfer failed
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    Could not receive file
+                                </p>
                             </div>
                         </Card>
                     )}
