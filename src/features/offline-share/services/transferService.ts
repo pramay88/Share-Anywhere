@@ -196,10 +196,13 @@ function waitForResponse(connection: DataConnection, transferId: string): Promis
                 if (message.type === 'accept') {
                     clearTimeout(timeout);
                     connection.off('data', handler);
-                    resolve(true);
+                    console.log('✅ Receiver accepted transfer');
+                    // Small delay to ensure receiver is ready
+                    setTimeout(() => resolve(true), 500);
                 } else if (message.type === 'reject') {
                     clearTimeout(timeout);
                     connection.off('data', handler);
+                    console.log('❌ Receiver rejected transfer');
                     resolve(false);
                 }
             }

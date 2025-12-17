@@ -23,6 +23,8 @@ const OfflineShare = () => {
     const [showIncomingModal, setShowIncomingModal] = useState(false);
     const [incomingConnection, setIncomingConnection] = useState<DataConnection | null>(null);
     const [incomingSenderName, setIncomingSenderName] = useState('');
+    const [incomingFileName, setIncomingFileName] = useState('');
+    const [incomingFileSize, setIncomingFileSize] = useState<number>(0);
 
     // Hooks
     const {
@@ -64,12 +66,20 @@ const OfflineShare = () => {
             conn,
             // onRequest callback - called when transfer request arrives
             (metadata, accept, reject) => {
+                // Store file metadata
+                setIncomingFileName(metadata.name);
+                setIncomingFileSize(metadata.size);
+
                 // Show modal with file info
                 setShowIncomingModal(true);
                 setStatus('busy');
 
                 // Store accept/reject callbacks for modal buttons
-                (window as any).__pendingTransferAccept = accept;
+                (window as any).__pendingTransferAccept = async () => {
+                    accept();
+                    // Small delay to ensure accept message is sent before chunks start
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                };
                 (window as any).__pendingTransferReject = reject;
             },
             // onProgress callback
@@ -309,6 +319,8 @@ const OfflineShare = () => {
             <IncomingTransferModal
                 isOpen={showIncomingModal}
                 senderName={incomingSenderName}
+                fileName={incomingFileName}
+                fileSize={incomingFileSize}
                 onAccept={handleAcceptTransfer}
                 onDecline={handleDeclineTransfer}
             />
