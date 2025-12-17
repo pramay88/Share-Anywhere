@@ -1,8 +1,9 @@
+```
 /**
  * OfflineShare Page - Main component for offline/nearby file sharing
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,10 @@ const OfflineShare = () => {
     const [receiverProgress, setReceiverProgress] = useState(0);
     const [receiverSpeed, setReceiverSpeed] = useState(0);
     const [receiverStatus, setReceiverStatus] = useState<'idle' | 'waiting' | 'receiving' | 'success' | 'error'>('idle');
+    
+    // Use refs to store callbacks to avoid closure issues
+    const acceptCallbackRef = useRef<(() => void) | null>(null);
+    const rejectCallbackRef = useRef<(() => void) | null>(null);
 
     // Hooks
     const {
@@ -69,37 +74,46 @@ const OfflineShare = () => {
         setIncomingSenderName(senderDevice?.name || conn.peer);
         setIsReceiving(true);
         setReceiverStatus('waiting');
+        
+        console.log('📨 Incoming connection, starting receiveFile...');
 
         // Start listening for transfer request
         receiveFile(
             conn,
             // onRequest callback - called when transfer request arrives
             (metadata, accept, reject) => {
+                console.log('📩 Transfer request received, showing modal...');
+
                 // Store file metadata
                 setIncomingFileName(metadata.name);
                 setIncomingFileSize(metadata.size);
 
-                // Show modal with file info
-                setShowIncomingModal(true);
-                setStatus('busy');
-
-                // Store accept/reject callbacks for modal buttons
-                (window as any).__pendingTransferAccept = async () => {
+                // Store callbacks in refs
+                acceptCallbackRef.current = async () => {
+                    console.log('✅ User accepted transfer');
                     accept();
                     setReceiverStatus('receiving');
+                    setShowIncomingModal(false); // Close modal when accepting
                     // Small delay to ensure accept message is sent before chunks start
                     await new Promise(resolve => setTimeout(resolve, 300));
                 };
-                (window as any).__pendingTransferReject = () => {
+                
+                rejectCallbackRef.current = () => {
+                    console.log('❌ User rejected transfer');
                     reject();
                     setReceiverStatus('idle');
                     setIsReceiving(false);
+                    setShowIncomingModal(false);
                 };
+                
+                // Show modal AFTER storing callbacks
+                setShowIncomingModal(true);
+                setStatus('busy');
             },
             // onProgress callback
             (prog, spd) => {
                 // Update receiver progress
-                console.log(`📥 Receiving: ${prog}% at ${spd} bytes/sec`);
+                console.log(`📥 Receiving: ${ prog }% at ${ spd } bytes / sec`);
                 setReceiverProgress(prog);
                 setReceiverSpeed(spd);
             }
@@ -134,8 +148,8 @@ const OfflineShare = () => {
                         setReceiverStatus('idle');
                         setReceiverProgress(0);
                         setReceiverSpeed(0);
-                        delete (window as any).__pendingTransferAccept;
-                        delete (window as any).__pendingTransferReject;
+                        acceptCallbackRef.current = null;
+                        rejectCallbackRef.current = null;
                     }, 3000);
                 } catch (downloadError) {
                     console.error('Download error:', downloadError);
@@ -151,8 +165,8 @@ const OfflineShare = () => {
                 setIsReceiving(false);
                 setReceiverProgress(0);
                 setReceiverSpeed(0);
-                delete (window as any).__pendingTransferAccept;
-                delete (window as any).__pendingTransferReject;
+                acceptCallbackRef.current = null;
+                rejectCallbackRef.current = null;
             });
     });
 
@@ -217,18 +231,22 @@ const OfflineShare = () => {
 
     // Handle accept incoming transfer
     const handleAcceptTransfer = () => {
+        console.log('🔘 Accept button clicked');
         // Call the stored accept callback
-        if ((window as any).__pendingTransferAccept) {
-            (window as any).__pendingTransferAccept();
+        if (acceptCallbackRef.current) {
+            acceptCallbackRef.current();
+            acceptCallbackRef.current = null;
         }
         // Keep modal open to show progress
     };
 
     // Handle decline incoming transfer
     const handleDeclineTransfer = () => {
+        console.log('🔘 Decline button clicked');
         // Call the stored reject callback
-        if ((window as any).__pendingTransferReject) {
-            (window as any).__pendingTransferReject();
+        if (rejectCallbackRef.current) {
+            rejectCallbackRef.current();
+            rejectCallbackRef.current = null;
         }
 
         if (incomingConnection) {
@@ -237,8 +255,8 @@ const OfflineShare = () => {
         setShowIncomingModal(false);
         setIncomingConnection(null);
         setStatus('online');
-        delete (window as any).__pendingTransferAccept;
-        delete (window as any).__pendingTransferReject;
+        setReceiverProgress(0);
+        setReceiverSpeed(0);
     };
 
     // Loading state
@@ -437,7 +455,7 @@ const OfflineShare = () => {
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-muted-foreground">{receiverProgress}%</span>
                                     <span className="text-muted-foreground">
-                                        {receiverSpeed > 0 && `${(receiverSpeed / (1024 * 1024)).toFixed(2)} MB/s`}
+                                        {receiverSpeed > 0 && `${ (receiverSpeed / (1024 * 1024)).toFixed(2) } MB / s`}
                                     </span>
                                 </div>
                             </div>
