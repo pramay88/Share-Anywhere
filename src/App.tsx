@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Send from "./pages/Send";
 import Receive from "./pages/ReceiveNew";
 import QuickShare from "./pages/QuickShare";
+import OfflineShare from "./pages/OfflineShare";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -45,6 +46,7 @@ const AppContent = () => {
         <Route path="/send" element={<Send />} />
         <Route path="/quickshare" element={<QuickShare />} />
         <Route path="/receive" element={<Receive />} />
+        <Route path="/offline-share" element={<OfflineShare />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

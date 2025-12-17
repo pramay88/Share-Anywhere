@@ -77,7 +77,7 @@ const Index = () => {
           </div>
 
           {/* Features */}
-          <div className="grid md:grid-cols-3 gap-6 pt-12 max-w-4xl mx-auto">
+          {/* <div className="grid md:grid-cols-3 gap-6 pt-12 max-w-4xl mx-auto">
             <Card className="p-6 space-y-3 hover:shadow-md transition-shadow">
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Zap className="h-6 w-6" />
@@ -105,7 +105,7 @@ const Index = () => {
                 Works seamlessly across all your devices
               </p>
             </Card>
-          </div>
+          </div> */}
         </div>
       </section>
 

@@ -37,5 +37,25 @@ service cloud.firestore {
                      (resource.data.downloaded_by == null || 
                       request.auth.uid == resource.data.downloaded_by);
     }
+    
+    // Offline Share - Device presence collection
+    match /offline_share_devices/{deviceId} {
+      // Anyone can read devices (for discovery)
+      allow read: if true;
+      
+      // Anyone can create/update their own device presence
+      allow create, update: if true;
+      
+      // Devices can delete their own presence
+      allow delete: if true;
+    }
+    
+    // Offline Share - WebRTC signaling collection
+    match /webrtc_signals/{signalId} {
+      // Anyone can read/write signals (for WebRTC signaling)
+      allow read, write: if true;
+      
+      // Auto-delete old signals (handled by client or Cloud Functions)
+    }
   }
 }
