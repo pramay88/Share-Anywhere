@@ -59,22 +59,27 @@ const OfflineShare = () => {
         setIncomingConnection(conn);
         setIncomingSenderName(senderDevice?.name || conn.peer);
 
-        // Start listening for file metadata
+        // Start listening for transfer request
         receiveFile(
             conn,
-            (metadata) => {
-                // Metadata received - show modal to user
-                console.log('📥 Incoming file:', metadata.name);
-                setIncomingTransferId(metadata.transferId); // Assuming metadata contains transferId
+            // onRequest callback - called when transfer request arrives
+            (metadata, accept, reject) => {
+                // Show modal with file info
                 setShowIncomingModal(true);
                 setStatus('busy');
+
+                // Store accept/reject callbacks for modal buttons
+                (window as any).__pendingTransferAccept = accept;
+                (window as any).__pendingTransferReject = reject;
             },
+            // onProgress callback
             (prog, spd) => {
-                // Progress callback - not used yet
+                // Update progress during transfer
+                // Note: This is handled by useFileTransfer hook
             }
         )
             .then(({ file, metadata }) => {
-                // File received successfully - download it
+                // File received successfully - trigger download
                 const url = URL.createObjectURL(file);
                 const a = document.createElement('a');
                 a.href = url;
@@ -84,15 +89,20 @@ const OfflineShare = () => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
+                // Clean up
                 setIncomingConnection(null);
                 setShowIncomingModal(false);
                 setStatus('online');
+                delete (window as any).__pendingTransferAccept;
+                delete (window as any).__pendingTransferReject;
             })
             .catch((error) => {
                 console.error('Failed to receive file:', error);
                 setIncomingConnection(null);
                 setShowIncomingModal(false);
                 setStatus('online');
+                delete (window as any).__pendingTransferAccept;
+                delete (window as any).__pendingTransferReject;
             });
     });
 
@@ -115,7 +125,7 @@ const OfflineShare = () => {
             // Connect to device
             const conn = await connectToDevice(deviceId);
 
-            // Send file (will wait for receiver to accept)
+            // Send file
             await sendFile(selectedFile, conn);
 
             // Disconnect
@@ -131,31 +141,29 @@ const OfflineShare = () => {
     };
 
     // Handle accept incoming transfer
-    const handleAcceptTransfer = async () => {
-        if (!incomingConnection) return;
-
-        // Send acceptance to sender
-        const { acceptTransfer } = await import('../features/offline-share/services/transferService');
-        acceptTransfer(incomingConnection, incomingTransferId);
-
-        // Close modal - transfer will continue automatically
-        setShowIncomingModal(false);
+    const handleAcceptTransfer = () => {
+        // Call the stored accept callback
+        if ((window as any).__pendingTransferAccept) {
+            (window as any).__pendingTransferAccept();
+        }
+        // Keep modal open to show progress
     };
 
     // Handle decline incoming transfer
-    const handleDeclineTransfer = async () => {
-        if (!incomingConnection) return;
+    const handleDeclineTransfer = () => {
+        // Call the stored reject callback
+        if ((window as any).__pendingTransferReject) {
+            (window as any).__pendingTransferReject();
+        }
 
-        // Send decline to sender
-        const { declineTransfer } = await import('../features/offline-share/services/transferService');
-        declineTransfer(incomingConnection, incomingTransferId);
-
-        // Close connection
-        incomingConnection.close();
-
+        if (incomingConnection) {
+            incomingConnection.close();
+        }
         setShowIncomingModal(false);
         setIncomingConnection(null);
         setStatus('online');
+        delete (window as any).__pendingTransferAccept;
+        delete (window as any).__pendingTransferReject;
     };
 
     // Loading state

@@ -111,14 +111,13 @@ export interface WebRTCSignal {
 // ============================================================================
 
 export type TransferMessageType =
-    | 'metadata'
-    | 'chunk'
-    | 'accept'
-    | 'decline'
-    | 'ack'
-    | 'complete'
-    | 'error'
-    | 'cancel';
+    | 'request'    // Sender requests to send file
+    | 'accept'     // Receiver accepts transfer
+    | 'reject'     // Receiver rejects transfer
+    | 'chunk'      // File chunk data
+    | 'complete'   // Transfer complete
+    | 'error'      // Transfer error
+    | 'cancel';    // Transfer cancelled
 
 export interface TransferMessage {
     type: TransferMessageType;
@@ -171,7 +170,11 @@ export interface UseWebRTCReturn {
 
 export interface UseFileTransferReturn {
     sendFile: (file: File, connection: DataConnection) => Promise<void>;
-    receiveFile: (connection: DataConnection) => Promise<Blob>;
+    receiveFile: (
+        connection: DataConnection,
+        onRequest: (metadata: FileMetadata, accept: () => void, reject: () => void) => void,
+        onProgress?: (progress: number, speed: number) => void
+    ) => Promise<{ file: Blob; metadata: FileMetadata }>;
     progress: number;
     speed: number;
     status: TransferStatus;

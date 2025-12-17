@@ -74,13 +74,6 @@ export function assembleChunks(chunks: ArrayBuffer[]): Blob {
 // ============================================================================
 
 /**
- * Generates a unique ID for a file transfer.
- */
-function generateTransferId(): string {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
-
-/**
  * Send file over WebRTC connection
  */
 export async function sendFile(
@@ -109,37 +102,35 @@ export async function sendFile(
     }
 
     const transferId = generateTransferId();
-    const chunkSize = DEFAULT_CHUNK_SIZE;
-    const totalChunks = Math.ceil(file.size / chunkSize);
 
-    // Send transfer request (metadata) first
-    const metadata: FileMetadata = {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-    };
-
-    const requestMessage: TransferMessage = {
-        type: 'metadata',
-        transferId,
-        metadata,
-        totalChunks,
-    };
-
+    // Step 1: Send transfer request with file metadata
     console.log('📤 Sending transfer request:', file.name);
+    const requestMessage: TransferMessage = {
+        type: 'request',
+        transferId,
+        metadata: {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            lastModified: file.lastModified,
+        },
+    };
+
     connection.send(requestMessage);
 
-    // Wait for receiver to accept or decline
-    const accepted = await waitForAcceptance(connection, transferId);
+    // Step 2: Wait for acceptance or rejection
+    const accepted = await waitForResponse(connection, transferId);
 
     if (!accepted) {
-        throw new Error('Transfer declined by receiver');
+        throw new Error('Transfer rejected by receiver');
     }
 
     console.log('✅ Transfer accepted, starting file transfer');
 
-    // Send chunks
+    // Step 3: Send file chunks
+    const chunkSize = DEFAULT_CHUNK_SIZE;
+    const totalChunks = Math.ceil(file.size / chunkSize);
+
     let offset = 0;
     let chunkIndex = 0;
     const startTime = Date.now();
@@ -154,6 +145,7 @@ export async function sendFile(
             transferId,
             chunkIndex,
             chunkData,
+            totalChunks,
         };
 
         connection.send(chunkMessage);
@@ -177,7 +169,7 @@ export async function sendFile(
         await new Promise((resolve) => setTimeout(resolve, 1));
     }
 
-    // Send completion message
+    // Step 4: Send completion message
     const completeMessage: TransferMessage = {
         type: 'complete',
         transferId,
@@ -188,32 +180,29 @@ export async function sendFile(
 }
 
 /**
- * Wait for receiver to accept or decline transfer
+ * Wait for transfer acceptance/rejection from receiver
  */
-function waitForAcceptance(connection: DataConnection, transferId: string): Promise<boolean> {
+function waitForResponse(connection: DataConnection, transferId: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            cleanup();
-            reject(new Error('Transfer acceptance timeout'));
-        }, 30000); // 30 seconds for user to decide
+            connection.off('data', handler);
+            reject(new Error('Response timeout - no answer from receiver'));
+        }, 30000); // 30 second timeout
 
         const handler = (data: any) => {
             const message = data as TransferMessage;
 
             if (message.transferId === transferId) {
                 if (message.type === 'accept') {
-                    cleanup();
+                    clearTimeout(timeout);
+                    connection.off('data', handler);
                     resolve(true);
-                } else if (message.type === 'decline') {
-                    cleanup();
+                } else if (message.type === 'reject') {
+                    clearTimeout(timeout);
+                    connection.off('data', handler);
                     resolve(false);
                 }
             }
-        };
-
-        const cleanup = () => {
-            clearTimeout(timeout);
-            connection.off('data', handler);
         };
 
         connection.on('data', handler);
@@ -226,11 +215,11 @@ function waitForAcceptance(connection: DataConnection, transferId: string): Prom
 
 /**
  * Receive file over WebRTC connection
- * Returns a promise that resolves when user accepts and file is received
+ * Returns file metadata for display, actual file comes via callback
  */
 export async function receiveFile(
     connection: DataConnection,
-    onMetadata?: (metadata: FileMetadata) => void,
+    onRequest: (metadata: FileMetadata, accept: () => void, reject: () => void) => void,
     onProgress?: (progress: number, speed: number) => void
 ): Promise<{ file: Blob; metadata: FileMetadata }> {
     return new Promise((resolve, reject) => {
@@ -238,37 +227,62 @@ export async function receiveFile(
         let totalChunks = 0;
         let receivedChunks: ArrayBuffer[] = [];
         let transferId = '';
-        let startTime = 0;
-        let acceptResolve: ((accept: boolean) => void) | null = null;
+        let transferAccepted = false;
+        const startTime = Date.now();
 
         const handler = (data: any) => {
             const message = data as TransferMessage;
 
             try {
                 switch (message.type) {
-                    case 'metadata':
-                        // Receive metadata and notify UI to show accept/decline modal
+                    case 'request':
+                        // Receive transfer request
                         metadata = message.metadata!;
-                        totalChunks = message.totalChunks!;
                         transferId = message.transferId;
-                        receivedChunks = new Array(totalChunks);
-
                         console.log(`📥 Transfer request: ${metadata.name} (${(metadata.size / 1024 / 1024).toFixed(2)} MB)`);
 
-                        // Notify caller about metadata (so they can show modal)
-                        if (onMetadata) {
-                            onMetadata(metadata);
-                        }
+                        // Call user callback to show accept/reject dialog
+                        onRequest(
+                            metadata,
+                            // Accept callback
+                            () => {
+                                transferAccepted = true;
+                                const acceptMessage: TransferMessage = {
+                                    type: 'accept',
+                                    transferId,
+                                };
+                                connection.send(acceptMessage);
+                                console.log('✅ Transfer accepted');
+                            },
+                            // Reject callback
+                            () => {
+                                transferAccepted = false;
+                                const rejectMessage: TransferMessage = {
+                                    type: 'reject',
+                                    transferId,
+                                };
+                                connection.send(rejectMessage);
+                                connection.off('data', handler);
+                                reject(new Error('Transfer rejected by user'));
+                                console.log('❌ Transfer rejected');
+                            }
+                        );
                         break;
 
                     case 'chunk':
-                        // Only process chunks if we've accepted the transfer
-                        if (!startTime) {
-                            startTime = Date.now();
+                        // Receive chunk (only if transfer was accepted)
+                        if (!transferAccepted) {
+                            console.warn('Received chunk but transfer not accepted, ignoring');
+                            return;
                         }
 
-                        // Receive chunk
                         if (message.chunkIndex !== undefined && message.chunkData) {
+                            // Initialize chunks array on first chunk
+                            if (receivedChunks.length === 0 && message.totalChunks) {
+                                totalChunks = message.totalChunks;
+                                receivedChunks = new Array(totalChunks);
+                            }
+
                             receivedChunks[message.chunkIndex] = message.chunkData;
 
                             // Update activity
@@ -296,10 +310,14 @@ export async function receiveFile(
                             return;
                         }
 
-                        console.log('✅ File received successfully');
+                        if (!transferAccepted) {
+                            reject(new Error('Transfer completed but was not accepted'));
+                            return;
+                        }
 
                         // Assemble file
                         const file = assembleChunks(receivedChunks);
+                        console.log('✅ File received successfully');
                         resolve({ file, metadata });
                         break;
 
@@ -330,35 +348,13 @@ export async function receiveFile(
         connection.on('close', () => {
             clearTimeout(timeout);
             connection.off('data', handler);
-            reject(new Error('Connection closed during transfer'));
+            if (!transferAccepted) {
+                reject(new Error('Connection closed before transfer accepted'));
+            } else {
+                reject(new Error('Connection closed during transfer'));
+            }
         });
     });
-}
-
-/**
- * Send acceptance to sender
- */
-export function acceptTransfer(connection: DataConnection, transferId: string): void {
-    const acceptMessage: TransferMessage = {
-        type: 'accept',
-        transferId,
-    };
-
-    console.log('✅ Sending transfer acceptance');
-    connection.send(acceptMessage);
-}
-
-/**
- * Send decline to sender
- */
-export function declineTransfer(connection: DataConnection, transferId: string): void {
-    const declineMessage: TransferMessage = {
-        type: 'decline',
-        transferId,
-    };
-
-    console.log('❌ Sending transfer decline');
-    connection.send(declineMessage);
 }
 
 // ============================================================================
