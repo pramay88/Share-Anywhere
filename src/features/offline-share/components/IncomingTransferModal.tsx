@@ -38,7 +38,7 @@ export function IncomingTransferModal({
     };
 
     return (
-        <AlertDialog open={isOpen} onOpenChange={(open) => !open && onDecline()}>
+        <AlertDialog open={isOpen}>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Incoming File</AlertDialogTitle>
