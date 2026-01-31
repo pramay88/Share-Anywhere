@@ -22,12 +22,17 @@ const Send = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [fileInfo, setFileInfo] = useState<Array<{ name: string, size: number }>>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoadedFromUrl, setHasLoadedFromUrl] = useState(false);
 
   // Check for code in URL and fetch metadata from backend
   useEffect(() => {
     const codeFromUrl = searchParams.get("code");
-    if (codeFromUrl && codeFromUrl !== code) {
+
+    // Only load if we have a code in URL and haven't loaded it yet
+    if (codeFromUrl && !hasLoadedFromUrl) {
       setLoading(true);
+      setHasLoadedFromUrl(true);
+
       // Fetch share metadata from backend
       getTransferByShareCode(codeFromUrl)
         .then((transfer) => {
@@ -56,8 +61,13 @@ const Send = () => {
         .finally(() => {
           setLoading(false);
         });
+    } else if (!codeFromUrl && hasLoadedFromUrl) {
+      // URL changed to remove code, reset state
+      setHasLoadedFromUrl(false);
+      setCode("");
+      setFileInfo([]);
     }
-  }, [searchParams, code, getTransferByShareCode, navigate]);
+  }, [searchParams, hasLoadedFromUrl, getTransferByShareCode, navigate]);
 
   const handleFileSelect = async (selectedFiles: FileList | null) => {
     if (selectedFiles) {
