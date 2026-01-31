@@ -278,69 +278,83 @@ const Send = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="rounded-lg border bg-card p-3">
-                      <h3 className="font-semibold mb-2 text-xs">Selected Files</h3>
-                      <div className="space-y-1.5">
-                        {(files.length > 0 ? files : fileInfo).map((file, idx) => (
-                          <div
-                            key={idx}
-                            className="flex justify-between items-center text-xs bg-background p-2 rounded-md"
+                ) : (
+                  <div className="space-y-4">
+                    {/* Compact File Summary */}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                      <span>{(files.length > 0 ? files : fileInfo).length} File(s) Selected</span>
+                      <span>{((files.length > 0 ? files : fileInfo).reduce((acc, f) => acc + (f.size || 0), 0) / 1024 / 1024).toFixed(2)} MB Total</span>
+                    </div>
+
+                    {/* Unified Share Card */}
+                    <div className="bg-card border rounded-lg overflow-hidden">
+                      {/* Share Code Section */}
+                      <div className="bg-primary/5 p-4 text-center border-b border-border/50">
+                        <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Share Code</p>
+                        <div className="text-3xl font-bold tracking-widest text-primary mb-3 font-mono">
+                          {code}
+                        </div>
+                        <div className="flex justify-center gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 text-xs bg-background hover:bg-background/80"
+                            onClick={copyCode}
                           >
-                            <span className="truncate flex-1">{file.name}</span>
-                            <span className="text-muted-foreground ml-4">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </span>
-                          </div>
-                        ))}
+                            <Copy className="h-3 w-3 mr-1.5" />
+                            Copy
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={copyLink}
+                            className="h-8 text-xs bg-background hover:bg-background/80"
+                          >
+                            <Share2 className="h-3 w-3 mr-1.5" />
+                            Link
+                          </Button>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="bg-primary text-primary-foreground p-4 rounded-lg text-center">
-                      <p className="text-xs mb-1 opacity-90">Share Code</p>
-                      <div className="text-2xl font-bold tracking-wider mb-3">
-                        {code}
-                      </div>
-                      <div className="flex gap-2 justify-center flex-wrap">
-                        <Button
-                          variant="secondary"
+                      {/* QR Code Section */}
+                      <div className="p-4 flex flex-col items-center justify-center bg-white/50">
+                        <div className="bg-white p-2 rounded-lg border shadow-sm mb-2">
+                          <QRCodeSVG id="share-qr-svg" value={shareUrl} size={120} level="M" />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground text-center mb-2">
+                          Scan to download
+                        </p>
+                         <Button
+                          variant="ghost"
                           size="sm"
-                          onClick={copyCode}
+                          onClick={shareQR}
+                          className="h-7 text-xs"
                         >
-                          <Copy className="h-3 w-3 mr-1.5" />
-                          Copy Code
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={copyLink}
-                        >
-                          <Copy className="h-3 w-3 mr-1.5" />
-                          Copy Link
+                          <Share2 className="h-3 w-3 mr-1.5" />
+                          Share QR
                         </Button>
                       </div>
                     </div>
 
-                    <div className="bg-card border rounded-lg p-4 flex flex-col items-center space-y-2">
-                      <QRCodeSVG id="share-qr-svg" value={shareUrl} size={140} level="H" />
-                      <p className="text-xs text-muted-foreground text-center">
-                        Scan to download files
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={shareQR}
-                        className="w-full"
-                      >
-                        <Share2 className="h-3 w-3 mr-1.5" />
-                        Share QR Code
-                      </Button>
-                    </div>
-
-                    <div className="text-center pt-1">
+                    {/* Action Button */}
+                    <div className="pt-2">
                       <Button
                         variant="ghost"
+                        className="w-full text-muted-foreground hover:text-foreground text-xs h-9"
                         onClick={() => {
+                          setFiles([]);
+                          setCode("");
+                          setCustomCode("");
+                          setFileInfo([]);
+                          navigate("/send", { replace: true });
+                        }}
+                      >
+                        <ArrowLeft className="h-3 w-3 mr-2" />
+                        Send Another File
+                      </Button>
+                    </div>
+                  </div>
+                )}
                           setFiles([]);
                           setCode("");
                           setCustomCode("");
@@ -358,21 +372,21 @@ const Send = () => {
               <TabsContent value="text" className="mt-0">
                 <QuickShareForm />
               </TabsContent>
-            </Tabs>
-          </Card>
+            </Tabs >
+          </Card >
 
-          <div className="text-center mt-6">
-            <Button
-              variant="ghost"
-              onClick={() => navigate("/receive")}
-              className="text-muted-foreground"
-            >
-              Want to receive files instead?
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div className="text-center mt-6">
+    <Button
+      variant="ghost"
+      onClick={() => navigate("/receive")}
+      className="text-muted-foreground"
+    >
+      Want to receive files instead?
+    </Button>
+  </div>
+        </div >
+      </div >
+    </div >
   );
 };
 
