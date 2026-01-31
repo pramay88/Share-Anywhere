@@ -278,114 +278,102 @@ const Send = () => {
                     </div>
                   </>
                 ) : (
-                ) : (
-                  <div className="space-y-4">
-                    {/* Compact File Summary */}
+                ): (
+                    <div className = "space-y-4">
+                    {/* Compact File Summary */ }
                     <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                      <span>{(files.length > 0 ? files : fileInfo).length} File(s) Selected</span>
-                      <span>{((files.length > 0 ? files : fileInfo).reduce((acc, f) => acc + (f.size || 0), 0) / 1024 / 1024).toFixed(2)} MB Total</span>
+                  <span>{(files.length > 0 ? files : fileInfo).length} File(s) Selected</span>
+                  <span>{((files.length > 0 ? files : fileInfo).reduce((acc, f) => acc + (f.size || 0), 0) / 1024 / 1024).toFixed(2)} MB Total</span>
+                </div>
+
+                {/* Unified Share Card */}
+                <div className="bg-card border rounded-lg overflow-hidden">
+                  {/* Share Code Section */}
+                  <div className="bg-primary/5 p-4 text-center border-b border-border/50">
+                    <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Share Code</p>
+                    <div className="text-3xl font-bold tracking-widest text-primary mb-3 font-mono">
+                      {code}
                     </div>
-
-                    {/* Unified Share Card */}
-                    <div className="bg-card border rounded-lg overflow-hidden">
-                      {/* Share Code Section */}
-                      <div className="bg-primary/5 p-4 text-center border-b border-border/50">
-                        <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Share Code</p>
-                        <div className="text-3xl font-bold tracking-widest text-primary mb-3 font-mono">
-                          {code}
-                        </div>
-                        <div className="flex justify-center gap-2">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 text-xs bg-background hover:bg-background/80"
-                            onClick={copyCode}
-                          >
-                            <Copy className="h-3 w-3 mr-1.5" />
-                            Copy
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={copyLink}
-                            className="h-8 text-xs bg-background hover:bg-background/80"
-                          >
-                            <Share2 className="h-3 w-3 mr-1.5" />
-                            Link
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* QR Code Section */}
-                      <div className="p-4 flex flex-col items-center justify-center bg-white/50">
-                        <div className="bg-white p-2 rounded-lg border shadow-sm mb-2">
-                          <QRCodeSVG id="share-qr-svg" value={shareUrl} size={120} level="M" />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground text-center mb-2">
-                          Scan to download
-                        </p>
-                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={shareQR}
-                          className="h-7 text-xs"
-                        >
-                          <Share2 className="h-3 w-3 mr-1.5" />
-                          Share QR
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <div className="pt-2">
+                    <div className="flex justify-center gap-2">
                       <Button
-                        variant="ghost"
-                        className="w-full text-muted-foreground hover:text-foreground text-xs h-9"
-                        onClick={() => {
-                          setFiles([]);
-                          setCode("");
-                          setCustomCode("");
-                          setFileInfo([]);
-                          navigate("/send", { replace: true });
-                        }}
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 text-xs bg-background hover:bg-background/80"
+                        onClick={copyCode}
                       >
-                        <ArrowLeft className="h-3 w-3 mr-2" />
-                        Send Another File
+                        <Copy className="h-3 w-3 mr-1.5" />
+                        Copy
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={copyLink}
+                        className="h-8 text-xs bg-background hover:bg-background/80"
+                      >
+                        <Share2 className="h-3 w-3 mr-1.5" />
+                        Link
                       </Button>
                     </div>
                   </div>
-                )}
-                          setFiles([]);
-                          setCode("");
-                          setCustomCode("");
-                          setFileInfo([]);
-                          navigate("/send", { replace: true });
-                        }}
-                      >
-                        Share Different Files
-                      </Button>
+
+                  {/* QR Code Section */}
+                  <div className="p-4 flex flex-col items-center justify-center bg-white/50">
+                    <div className="bg-white p-2 rounded-lg border shadow-sm mb-2">
+                      <QRCodeSVG id="share-qr-svg" value={shareUrl} size={120} level="M" />
                     </div>
+                    <p className="text-[10px] text-muted-foreground text-center mb-2">
+                      Scan to download
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={shareQR}
+                      className="h-7 text-xs"
+                    >
+                      <Share2 className="h-3 w-3 mr-1.5" />
+                      Share QR
+                    </Button>
                   </div>
+                </div>
+
+                {/* Action Button */}
+                <div className="pt-2">
+                  <Button
+                    variant="ghost"
+                    className="w-full text-muted-foreground hover:text-foreground text-xs h-9"
+                    onClick={() => {
+                      setFiles([]);
+                      setCode("");
+                      setCustomCode("");
+                      setFileInfo([]);
+                      navigate("/send", { replace: true });
+                    }}
+                  >
+                    <ArrowLeft className="h-3 w-3 mr-2" />
+                    Send Another File
+                  </Button>
+                </div>
+              </div>
                 )}
-              </TabsContent>
+            </TabsContent>
 
-              <TabsContent value="text" className="mt-0">
-                <QuickShareForm />
-              </TabsContent>
-            </Tabs >
-          </Card >
+            <TabsContent value="text" className="mt-0">
+              <QuickShareForm />
+            </TabsContent>
+          </Tabs >
+        </Card >
 
-  <div className="text-center mt-6">
-    <Button
-      variant="ghost"
-      onClick={() => navigate("/receive")}
-      className="text-muted-foreground"
-    >
-      Want to receive files instead?
-    </Button>
-  </div>
-        </div >
+        <div className="text-center mt-6">
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/receive")}
+            className="text-muted-foreground"
+          >
+            Want to receive files instead?
+          </Button>
+        </div>
       </div >
+    </div >
     </div >
   );
 };
