@@ -22,11 +22,5 @@
       "src": "/(.*)",
       "dest": "/dist/$1"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cleanup/expired",
-      "schedule": "0 */6 * * *"
-    }
   ]
 }
