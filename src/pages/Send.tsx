@@ -22,21 +22,26 @@ const Send = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [fileInfo, setFileInfo] = useState<Array<{ name: string, size: number }>>([]);
   const [loading, setLoading] = useState(false);
-  const [hasLoadedFromUrl, setHasLoadedFromUrl] = useState(false);
 
   // Check for code in URL and fetch metadata from backend
   useEffect(() => {
     const codeFromUrl = searchParams.get("code");
+    console.log("=== Send Page useEffect ===");
+    console.log("Code from URL:", codeFromUrl);
+    console.log("Current code state:", code);
+    console.log("Should load?", codeFromUrl && code !== codeFromUrl);
 
-    // Only load if we have a code in URL and haven't loaded it yet
-    if (codeFromUrl && !hasLoadedFromUrl) {
+    // Load share if code is in URL but not yet loaded in state
+    if (codeFromUrl && code !== codeFromUrl) {
+      console.log("✅ Loading share from URL:", codeFromUrl);
       setLoading(true);
-      setHasLoadedFromUrl(true);
 
       // Fetch share metadata from backend
       getTransferByShareCode(codeFromUrl)
         .then((transfer) => {
+          console.log("Transfer response:", transfer);
           if (transfer) {
+            console.log("✅ Share loaded successfully:", transfer);
             setCode(codeFromUrl);
             // Extract file info from transfer
             if (transfer.files && transfer.files.length > 0) {
@@ -45,29 +50,31 @@ const Send = () => {
                 size: f.file_size || f.fileSize || 0
               }));
               setFileInfo(fileData);
+              console.log("File info set:", fileData);
             }
             toast.success("Share loaded successfully!");
           } else {
             // Code not found or expired
+            console.log("❌ Share not found");
             toast.error("Share not found or expired");
             navigate("/send", { replace: true });
           }
         })
         .catch((error) => {
-          console.error("Error loading share:", error);
+          console.error("❌ Error loading share:", error);
           toast.error("Failed to load share");
           navigate("/send", { replace: true });
         })
         .finally(() => {
           setLoading(false);
         });
-    } else if (!codeFromUrl && hasLoadedFromUrl) {
+    } else if (!codeFromUrl && code) {
       // URL changed to remove code, reset state
-      setHasLoadedFromUrl(false);
+      console.log("🔄 Resetting state - no code in URL");
       setCode("");
       setFileInfo([]);
     }
-  }, [searchParams, hasLoadedFromUrl, getTransferByShareCode, navigate]);
+  }, [searchParams, code, getTransferByShareCode, navigate]);
 
   const handleFileSelect = async (selectedFiles: FileList | null) => {
     if (selectedFiles) {
@@ -224,7 +231,7 @@ const Send = () => {
                       <p className="text-sm text-muted-foreground">{uploadProgress}% complete</p>
                     </div>
                   </div>
-                ) : !files.length ? (
+                ) : !code ? (
                   <>
                     <div
                       onDrop={handleDrop}
