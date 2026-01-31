@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Upload, Copy, Share2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,32 +14,50 @@ import { QuickShareForm } from "@/components/QuickShareForm";
 
 const Send = () => {
   const navigate = useNavigate();
-  const { uploadFiles, uploading, uploadProgress } = useFileTransfer();
+  const [searchParams] = useSearchParams();
+  const { uploadFiles, uploading, uploadProgress, getTransferByShareCode } = useFileTransfer();
   const [files, setFiles] = useState<File[]>([]);
   const [code, setCode] = useState("");
   const [customCode, setCustomCode] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [fileInfo, setFileInfo] = useState<Array<{ name: string, size: number }>>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Restore share state from localStorage on mount
+  // Check for code in URL and fetch metadata from backend
   useEffect(() => {
-    const savedShare = localStorage.getItem('lastShare');
-    if (savedShare) {
-      try {
-        const { code: savedCode, files: savedFiles, timestamp } = JSON.parse(savedShare);
-        // Only restore if less than 24 hours old
-        const age = Date.now() - timestamp;
-        if (age < 24 * 60 * 60 * 1000) {
-          setCode(savedCode);
-          setFileInfo(savedFiles || []);
-        } else {
-          localStorage.removeItem('lastShare');
-        }
-      } catch (e) {
-        localStorage.removeItem('lastShare');
-      }
+    const codeFromUrl = searchParams.get("code");
+    if (codeFromUrl && codeFromUrl !== code) {
+      setLoading(true);
+      // Fetch share metadata from backend
+      getTransferByShareCode(codeFromUrl)
+        .then((transfer) => {
+          if (transfer) {
+            setCode(codeFromUrl);
+            // Extract file info from transfer
+            if (transfer.files && transfer.files.length > 0) {
+              const fileData = transfer.files.map((f: any) => ({
+                name: f.original_name || f.fileName || 'file',
+                size: f.file_size || f.fileSize || 0
+              }));
+              setFileInfo(fileData);
+            }
+            toast.success("Share loaded successfully!");
+          } else {
+            // Code not found or expired
+            toast.error("Share not found or expired");
+            navigate("/send", { replace: true });
+          }
+        })
+        .catch((error) => {
+          console.error("Error loading share:", error);
+          toast.error("Failed to load share");
+          navigate("/send", { replace: true });
+        })
+        .finally(() => {
+          setLoading(false);
+        });
     }
-  }, []);
+  }, [searchParams, code, getTransferByShareCode, navigate]);
 
   const handleFileSelect = async (selectedFiles: FileList | null) => {
     if (selectedFiles) {
@@ -49,16 +67,13 @@ const Send = () => {
       // Upload files and generate code
       const result = await uploadFiles(fileArray, customCode || undefined, 24);
       if (result) {
-        setCode(result.shareCode);
+        const shareCode = result.shareCode;
+        setCode(shareCode);
         const fileData = fileArray.map(f => ({ name: f.name, size: f.size }));
         setFileInfo(fileData);
 
-        // Save to localStorage
-        localStorage.setItem('lastShare', JSON.stringify({
-          code: result.shareCode,
-          files: fileData,
-          timestamp: Date.now()
-        }));
+        // Redirect to URL with code parameter
+        navigate(`/send?code=${shareCode}`, { replace: true });
 
         toast.success("Files uploaded and ready to share!");
       }
@@ -182,7 +197,15 @@ const Send = () => {
               </TabsList>
 
               <TabsContent value="files" className="mt-0">
-                {uploading ? (
+                {loading ? (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <div className="animate-spin mx-auto mb-4 h-8 w-8 border-2 border-foreground border-t-transparent rounded-full" />
+                      <h3 className="text-lg font-semibold mb-2">Loading Share...</h3>
+                      <p className="text-sm text-muted-foreground">Fetching share details</p>
+                    </div>
+                  </div>
+                ) : uploading ? (
                   <div className="space-y-4">
                     <div className="text-center">
                       <div className="animate-spin mx-auto mb-4 h-8 w-8 border-2 border-foreground border-t-transparent rounded-full" />
@@ -305,7 +328,7 @@ const Send = () => {
                           setCode("");
                           setCustomCode("");
                           setFileInfo([]);
-                          localStorage.removeItem('lastShare');
+                          navigate("/send", { replace: true });
                         }}
                       >
                         Share Different Files
