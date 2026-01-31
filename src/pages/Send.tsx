@@ -137,7 +137,7 @@ const Send = () => {
       <Header />
 
       <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-xl">
+        <div className="w-full max-w-md">
           <div className="mb-6">
             <h1 className="text-3xl font-bold tracking-tight mb-2">Send Files & Text</h1>
             <p className="text-muted-foreground">Share files or text with a simple code</p>

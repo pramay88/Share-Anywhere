@@ -67,7 +67,7 @@ const ReceiveContent = () => {
       <Header />
 
       <div className="flex-1 flex items-center justify-center p-4 md:p-6">
-        <div className="w-full max-w-xl">
+        <div className="w-full max-w-md">
           <div className="mb-4 md:mb-6">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Receive Files & Text</h1>
             <p className="text-sm md:text-base text-muted-foreground">Enter the share code to download files or view text</p>
