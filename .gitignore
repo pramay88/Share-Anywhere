@@ -30,3 +30,7 @@ dist-ssr
 /node_modules
 supabase/config.toml
 .vercel
+
+# Firebase helper scripts (contain credentials)
+encode-firebase-key.ps1
+encode-service-account.js
