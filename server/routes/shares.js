@@ -1,29 +1,15 @@
 /**
  * Share Routes
- * API endpoints for creating and retrieving shares
+ * Production-ready API with direct Cloudinary uploads
  */
 
 import express from 'express';
-import multer from 'multer';
-import rateLimit from 'express-rate-limit';
 import { getFirestore } from '../config/firebase.js';
+import { generateUploadSignature, getFileUrl } from '../services/uploadService.js';
+import { validateApiKey, createRateLimiter, publicRateLimiter } from '../middleware/auth.js';
+import { cleanupExpiredShares, permanentlyDeleteOldShares } from '../services/cleanupService.js';
 
 const router = express.Router();
-
-// Configure multer for file uploads (memory storage)
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 50 * 1024 * 1024, // 50MB limit
-    },
-});
-
-// Rate limiting
-const createShareLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // 20 requests per window
-    message: { success: false, error: 'Too many requests, please try again later' },
-});
 
 /**
  * Generate unique share code
@@ -67,11 +53,12 @@ async function generateUniqueShareCode() {
 
 /**
  * POST /api/shares/create
- * Create a new share
+ * Generate upload signature and create share metadata
+ * Protected: Requires API key
  */
-router.post('/create', createShareLimiter, upload.single('file'), async (req, res) => {
+router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
     try {
-        const { contentType, content, expiresInHours = 24 } = req.body;
+        const { contentType, content, fileName, fileSize, mimeType } = req.body;
 
         // Validate content type
         if (!['text', 'url', 'file'].includes(contentType)) {
@@ -84,16 +71,18 @@ router.post('/create', createShareLimiter, upload.single('file'), async (req, re
         // Generate unique share code
         const shareCode = await generateUniqueShareCode();
 
-        // Calculate expiration
-        const expiresAt = new Date(Date.now() + parseInt(expiresInHours) * 60 * 60 * 1000);
+        // Calculate expiry (24 hours)
+        const createdAt = new Date();
+        const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
 
         const db = getFirestore();
         const shareData = {
             shareCode,
             contentType,
-            createdAt: new Date(),
+            createdAt,
             expiresAt,
             consumed: false,
+            status: 'pending',
         };
 
         // Handle different content types
@@ -105,20 +94,23 @@ router.post('/create', createShareLimiter, upload.single('file'), async (req, re
                 });
             }
             shareData.content = content;
+            shareData.status = 'ready';
         } else if (contentType === 'file') {
-            if (!req.file) {
+            if (!fileName) {
                 return res.status(400).json({
                     success: false,
-                    error: 'File is required for file shares',
+                    error: 'fileName is required for file shares',
                 });
             }
 
-            // For now, store file as base64 in Firestore
-            // TODO: Upload to Cloudinary for production
-            shareData.fileName = req.file.originalname;
-            shareData.fileSize = req.file.size;
-            shareData.mimeType = req.file.mimetype;
-            shareData.fileData = req.file.buffer.toString('base64');
+            // Generate Cloudinary upload signature
+            const uploadSignature = generateUploadSignature(shareCode, fileName);
+
+            shareData.fileName = fileName;
+            shareData.fileSize = fileSize || 0;
+            shareData.mimeType = mimeType || 'application/octet-stream';
+            shareData.cloudinaryPublicId = uploadSignature.publicId;
+            shareData.status = 'pending'; // Will be updated to 'ready' after upload
         }
 
         // Save to Firestore
@@ -126,15 +118,24 @@ router.post('/create', createShareLimiter, upload.single('file'), async (req, re
 
         const shareUrl = `${process.env.APP_URL || 'http://localhost:8080'}/receive?code=${shareCode}`;
 
-        res.json({
+        // Response
+        const response = {
             success: true,
             data: {
                 shareCode,
                 shareUrl,
                 expiresAt: expiresAt.toISOString(),
-                createdAt: new Date().toISOString(),
+                createdAt: createdAt.toISOString(),
             },
-        });
+        };
+
+        // Include upload signature for file shares
+        if (contentType === 'file') {
+            const uploadSignature = generateUploadSignature(shareCode, fileName);
+            response.data.uploadSignature = uploadSignature;
+        }
+
+        res.json(response);
     } catch (error) {
         console.error('Error creating share:', error);
         res.status(500).json({
@@ -145,10 +146,69 @@ router.post('/create', createShareLimiter, upload.single('file'), async (req, re
 });
 
 /**
- * GET /api/shares/:code
- * Get share by code
+ * POST /api/shares/:code/complete
+ * Mark file upload as complete
+ * Protected: Requires API key
  */
-router.get('/:code', async (req, res) => {
+router.post('/:code/complete', validateApiKey, createRateLimiter, async (req, res) => {
+    try {
+        const { code } = req.params;
+        const { cloudinaryPublicId, cloudinaryUrl } = req.body;
+
+        if (!cloudinaryPublicId) {
+            return res.status(400).json({
+                success: false,
+                error: 'cloudinaryPublicId is required',
+            });
+        }
+
+        const db = getFirestore();
+        const docRef = db.collection('shares').doc(code);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).json({
+                success: false,
+                error: 'Share not found',
+            });
+        }
+
+        const shareData = doc.data();
+
+        if (shareData.status !== 'pending') {
+            return res.status(400).json({
+                success: false,
+                error: 'Share is not pending upload',
+            });
+        }
+
+        // Update share with Cloudinary details
+        await docRef.update({
+            cloudinaryPublicId,
+            cloudinaryUrl: cloudinaryUrl || getFileUrl(cloudinaryPublicId),
+            status: 'ready',
+            uploadedAt: new Date(),
+        });
+
+        res.json({
+            success: true,
+            message: 'Upload completed successfully',
+        });
+    } catch (error) {
+        console.error('Error completing upload:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to complete upload',
+        });
+    }
+});
+
+/**
+ * GET /api/shares/:code
+ * Get share metadata and content
+ * Public: No API key required
+ */
+router.get('/:code', publicRateLimiter, async (req, res) => {
     try {
         const { code } = req.params;
 
@@ -172,26 +232,46 @@ router.get('/:code', async (req, res) => {
             });
         }
 
-        // Check if already consumed
-        if (shareData.consumed) {
+        // Check if deleted
+        if (shareData.status === 'deleted') {
             return res.status(410).json({
                 success: false,
-                error: 'Share has already been consumed',
+                error: 'Share has been deleted',
             });
         }
 
-        res.json({
+        // Check if ready
+        if (shareData.status === 'pending') {
+            return res.status(202).json({
+                success: false,
+                error: 'Upload in progress. Please try again in a moment.',
+            });
+        }
+
+        // Build response
+        const response = {
             success: true,
             data: {
                 contentType: shareData.contentType,
-                content: shareData.content,
-                fileName: shareData.fileName,
-                fileSize: shareData.fileSize,
-                mimeType: shareData.mimeType,
-                fileData: shareData.fileData,
                 expiresAt: shareData.expiresAt.toDate().toISOString(),
+                consumed: shareData.consumed,
             },
-        });
+        };
+
+        // Include content for text/url
+        if (shareData.contentType === 'text' || shareData.contentType === 'url') {
+            response.data.content = shareData.content;
+        }
+
+        // Include file metadata
+        if (shareData.contentType === 'file') {
+            response.data.fileName = shareData.fileName;
+            response.data.fileSize = shareData.fileSize;
+            response.data.mimeType = shareData.mimeType;
+            // Don't include Cloudinary URL here - use download endpoint
+        }
+
+        res.json(response);
     } catch (error) {
         console.error('Error getting share:', error);
         res.status(500).json({
@@ -202,10 +282,78 @@ router.get('/:code', async (req, res) => {
 });
 
 /**
+ * GET /api/shares/:code/download
+ * Redirect to Cloudinary CDN for file download
+ * Public: No API key required
+ */
+router.get('/:code/download', publicRateLimiter, async (req, res) => {
+    try {
+        const { code } = req.params;
+
+        const db = getFirestore();
+        const doc = await db.collection('shares').doc(code).get();
+
+        if (!doc.exists) {
+            return res.status(404).json({
+                success: false,
+                error: 'Share not found',
+            });
+        }
+
+        const shareData = doc.data();
+
+        // Check if expired
+        if (shareData.expiresAt.toDate() < new Date()) {
+            return res.status(410).json({
+                success: false,
+                error: 'Share has expired',
+            });
+        }
+
+        // Check if deleted
+        if (shareData.status === 'deleted') {
+            return res.status(410).json({
+                success: false,
+                error: 'Share has been deleted',
+            });
+        }
+
+        // Check if file share
+        if (shareData.contentType !== 'file') {
+            return res.status(400).json({
+                success: false,
+                error: 'This share is not a file',
+            });
+        }
+
+        // Check if ready
+        if (shareData.status === 'pending') {
+            return res.status(202).json({
+                success: false,
+                error: 'Upload in progress. Please try again in a moment.',
+            });
+        }
+
+        // Get Cloudinary URL
+        const cloudinaryUrl = shareData.cloudinaryUrl || getFileUrl(shareData.cloudinaryPublicId);
+
+        // Redirect to Cloudinary CDN
+        res.redirect(302, cloudinaryUrl);
+    } catch (error) {
+        console.error('Error downloading file:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to download file',
+        });
+    }
+});
+
+/**
  * POST /api/shares/:code/consume
  * Mark share as consumed
+ * Public: No API key required
  */
-router.post('/:code/consume', async (req, res) => {
+router.post('/:code/consume', publicRateLimiter, async (req, res) => {
     try {
         const { code } = req.params;
 
@@ -224,6 +372,52 @@ router.post('/:code/consume', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to consume share',
+        });
+    }
+});
+
+/**
+ * POST /api/cleanup/expired
+ * Cleanup expired shares (cron endpoint)
+ * Protected: Requires API key
+ */
+router.post('/cleanup/expired', validateApiKey, async (req, res) => {
+    try {
+        const results = await cleanupExpiredShares();
+
+        res.json({
+            success: true,
+            message: 'Cleanup completed',
+            data: results,
+        });
+    } catch (error) {
+        console.error('Error during cleanup:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Cleanup failed',
+        });
+    }
+});
+
+/**
+ * POST /api/cleanup/permanent
+ * Permanently delete old shares (cron endpoint)
+ * Protected: Requires API key
+ */
+router.post('/cleanup/permanent', validateApiKey, async (req, res) => {
+    try {
+        const results = await permanentlyDeleteOldShares();
+
+        res.json({
+            success: true,
+            message: 'Permanent deletion completed',
+            data: results,
+        });
+    } catch (error) {
+        console.error('Error during permanent deletion:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Permanent deletion failed',
         });
     }
 });
