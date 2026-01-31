@@ -19,6 +19,27 @@ const Send = () => {
   const [code, setCode] = useState("");
   const [customCode, setCustomCode] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [fileInfo, setFileInfo] = useState<Array<{ name: string, size: number }>>([]);
+
+  // Restore share state from localStorage on mount
+  useEffect(() => {
+    const savedShare = localStorage.getItem('lastShare');
+    if (savedShare) {
+      try {
+        const { code: savedCode, files: savedFiles, timestamp } = JSON.parse(savedShare);
+        // Only restore if less than 24 hours old
+        const age = Date.now() - timestamp;
+        if (age < 24 * 60 * 60 * 1000) {
+          setCode(savedCode);
+          setFileInfo(savedFiles || []);
+        } else {
+          localStorage.removeItem('lastShare');
+        }
+      } catch (e) {
+        localStorage.removeItem('lastShare');
+      }
+    }
+  }, []);
 
   const handleFileSelect = async (selectedFiles: FileList | null) => {
     if (selectedFiles) {
@@ -29,6 +50,16 @@ const Send = () => {
       const result = await uploadFiles(fileArray, customCode || undefined, 24);
       if (result) {
         setCode(result.shareCode);
+        const fileData = fileArray.map(f => ({ name: f.name, size: f.size }));
+        setFileInfo(fileData);
+
+        // Save to localStorage
+        localStorage.setItem('lastShare', JSON.stringify({
+          code: result.shareCode,
+          files: fileData,
+          timestamp: Date.now()
+        }));
+
         toast.success("Files uploaded and ready to share!");
       }
     }
@@ -211,7 +242,7 @@ const Send = () => {
                     <div className="rounded-lg border bg-card p-4">
                       <h3 className="font-semibold mb-3 text-sm">Selected Files</h3>
                       <div className="space-y-2">
-                        {files.map((file, idx) => (
+                        {(files.length > 0 ? files : fileInfo).map((file, idx) => (
                           <div
                             key={idx}
                             className="flex justify-between items-center text-sm bg-background p-3 rounded-md"
@@ -273,6 +304,8 @@ const Send = () => {
                           setFiles([]);
                           setCode("");
                           setCustomCode("");
+                          setFileInfo([]);
+                          localStorage.removeItem('lastShare');
                         }}
                       >
                         Share Different Files
