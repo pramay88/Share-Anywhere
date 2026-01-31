@@ -278,14 +278,14 @@ const Send = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="space-y-4">
-                    <div className="rounded-lg border bg-card p-4">
-                      <h3 className="font-semibold mb-3 text-sm">Selected Files</h3>
-                      <div className="space-y-2">
+                  <div className="space-y-3">
+                    <div className="rounded-lg border bg-card p-3">
+                      <h3 className="font-semibold mb-2 text-xs">Selected Files</h3>
+                      <div className="space-y-1.5">
                         {(files.length > 0 ? files : fileInfo).map((file, idx) => (
                           <div
                             key={idx}
-                            className="flex justify-between items-center text-sm bg-background p-3 rounded-md"
+                            className="flex justify-between items-center text-xs bg-background p-2 rounded-md"
                           >
                             <span className="truncate flex-1">{file.name}</span>
                             <span className="text-muted-foreground ml-4">
@@ -296,9 +296,9 @@ const Send = () => {
                       </div>
                     </div>
 
-                    <div className="bg-primary text-primary-foreground p-6 rounded-lg text-center">
-                      <p className="text-xs mb-2 opacity-90">Share Code</p>
-                      <div className="text-3xl font-bold tracking-wider mb-4">
+                    <div className="bg-primary text-primary-foreground p-4 rounded-lg text-center">
+                      <p className="text-xs mb-1 opacity-90">Share Code</p>
+                      <div className="text-2xl font-bold tracking-wider mb-3">
                         {code}
                       </div>
                       <div className="flex gap-2 justify-center flex-wrap">
@@ -307,7 +307,7 @@ const Send = () => {
                           size="sm"
                           onClick={copyCode}
                         >
-                          <Copy className="h-4 w-4 mr-2" />
+                          <Copy className="h-3 w-3 mr-1.5" />
                           Copy Code
                         </Button>
                         <Button
@@ -315,14 +315,14 @@ const Send = () => {
                           size="sm"
                           onClick={copyLink}
                         >
-                          <Copy className="h-4 w-4 mr-2" />
+                          <Copy className="h-3 w-3 mr-1.5" />
                           Copy Link
                         </Button>
                       </div>
                     </div>
 
-                    <div className="bg-card border rounded-lg p-6 flex flex-col items-center space-y-3">
-                      <QRCodeSVG id="share-qr-svg" value={shareUrl} size={180} level="H" />
+                    <div className="bg-card border rounded-lg p-4 flex flex-col items-center space-y-2">
+                      <QRCodeSVG id="share-qr-svg" value={shareUrl} size={140} level="H" />
                       <p className="text-xs text-muted-foreground text-center">
                         Scan to download files
                       </p>
@@ -332,12 +332,12 @@ const Send = () => {
                         onClick={shareQR}
                         className="w-full"
                       >
-                        <Share2 className="h-4 w-4 mr-2" />
+                        <Share2 className="h-3 w-3 mr-1.5" />
                         Share QR Code
                       </Button>
                     </div>
 
-                    <div className="text-center pt-2">
+                    <div className="text-center pt-1">
                       <Button
                         variant="ghost"
                         onClick={() => {
