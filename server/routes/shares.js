@@ -58,7 +58,7 @@ async function generateUniqueShareCode() {
  */
 router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
     try {
-        const { contentType, content, fileName, fileSize, mimeType } = req.body;
+        const { contentType, content, fileName, fileSize, mimeType, ownerId, visibility } = req.body;
 
         // Validate content type
         if (!['text', 'url', 'file'].includes(contentType)) {
@@ -83,6 +83,9 @@ router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
             expiresAt,
             consumed: false,
             status: 'pending',
+            ownerId: ownerId || null,  // Optional: null for anonymous users
+            visibility: visibility || 'private',  // Default to private
+            downloadCount: 0,  // Track number of downloads
         };
 
         // Handle different content types
@@ -336,6 +339,36 @@ router.get('/:code/download', publicRateLimiter, async (req, res) => {
 
         // Get Cloudinary URL
         const cloudinaryUrl = shareData.cloudinaryUrl || getFileUrl(shareData.cloudinaryPublicId);
+
+        // Increment download count
+        await doc.ref.update({
+            downloadCount: (shareData.downloadCount || 0) + 1,
+        });
+
+        // If share has an owner, increment their receive stats
+        if (shareData.ownerId) {
+            try {
+                const statsRef = db.collection('userStats').doc(shareData.ownerId);
+                const statsDoc = await statsRef.get();
+
+                if (statsDoc.exists) {
+                    await statsRef.update({
+                        totalReceives: (statsDoc.data().totalReceives || 0) + 1,
+                        lastUpdated: new Date(),
+                    });
+                } else {
+                    await statsRef.set({
+                        totalSends: 0,
+                        totalReceives: 1,
+                        totalDataShared: 0,
+                        activeShares: 0,
+                        lastUpdated: new Date(),
+                    });
+                }
+            } catch (statsError) {
+                console.error('Error updating user stats:', statsError);
+            }
+        }
 
         // Redirect to Cloudinary CDN
         res.redirect(302, cloudinaryUrl);

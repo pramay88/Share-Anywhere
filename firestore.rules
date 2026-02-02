@@ -1,61 +1,54 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Transfers collection
-    match /transfers/{transferId} {
-      // Anyone can create a transfer (for anonymous uploads)
-      allow create: if true;
-      
-      // Anyone can read transfers (needed to download files with share code)
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Shares collection
+    match /shares/{shareCode} {
+      // Anyone can read shares (needed for receive flow)
       allow read: if true;
       
-      // Only owner can update/delete (if authenticated)
-      allow update, delete: if request.auth != null && 
-                              (resource.data.owner_id == null || 
-                               request.auth.uid == resource.data.owner_id);
-      
-      // Files subcollection
-      match /files/{fileId} {
-        // Anyone can read files (for downloads)
-        allow read: if true;
-        
-        // Anyone can create files (for uploads)
-        allow create: if true;
-        
-        // Only authenticated users can delete
-        allow delete: if request.auth != null;
-      }
-    }
-    
-    // Download logs collection
-    match /download_logs/{logId} {
-      // Anyone can create download logs
+      // Anyone can create shares (anonymous or logged-in)
       allow create: if true;
       
-      // Only authenticated users can read their own logs
-      allow read: if request.auth != null && 
-                     (resource.data.downloaded_by == null || 
-                      request.auth.uid == resource.data.downloaded_by);
+      // Only owner can update their own shares
+      // Or allow updates if no owner (anonymous shares)
+      allow update: if resource.data.ownerId == null 
+                    || isOwner(resource.data.ownerId);
+      
+      // Only owner can delete their shares
+      // Or allow deletion if no owner (anonymous shares)
+      allow delete: if resource.data.ownerId == null 
+                    || isOwner(resource.data.ownerId);
     }
     
-    // Offline Share - Device presence collection
-    match /offline_share_devices/{deviceId} {
-      // Anyone can read devices (for discovery)
-      allow read: if true;
+    // User stats collection
+    match /userStats/{userId} {
+      // Users can only read their own stats
+      allow read: if isOwner(userId);
       
-      // Anyone can create/update their own device presence
-      allow create, update: if true;
+      // Users can create their own stats
+      allow create: if isOwner(userId);
       
-      // Devices can delete their own presence
-      allow delete: if true;
+      // Users can update their own stats
+      allow update: if isOwner(userId);
+      
+      // Users cannot delete stats (optional - remove if you want deletion)
+      allow delete: if false;
     }
     
-    // Offline Share - WebRTC signaling collection
-    match /webrtc_signals/{signalId} {
-      // Anyone can read/write signals (for WebRTC signaling)
-      allow read, write: if true;
-      
-      // Auto-delete old signals (handled by client or Cloud Functions)
+    // Deny all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

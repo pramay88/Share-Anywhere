@@ -204,6 +204,24 @@ class ApiClient {
     }
 
     /**
+     * Get user's share history (last 24 hours)
+     */
+    async getUserHistory(userId: string): Promise<ApiResponse<any>> {
+        return this.request(`/api/user/${userId}/history`, {
+            method: 'GET',
+        });
+    }
+
+    /**
+     * Get user statistics
+     */
+    async getUserStats(userId: string): Promise<ApiResponse<any>> {
+        return this.request(`/api/user/${userId}/stats`, {
+            method: 'GET',
+        });
+    }
+
+    /**
      * Check API health
      */
     async healthCheck(): Promise<ApiResponse<any>> {
@@ -213,8 +231,8 @@ class ApiClient {
     }
 }
 
-// Export singleton instance
-export const apiClient = new ApiClient();
+// Export singleton instance with backend URL
+export const apiClient = new ApiClient(import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001');
 
 // Export class for testing
 export { ApiClient };

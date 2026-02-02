@@ -6,12 +6,14 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Send from "./pages/Send";
 import Receive from "./pages/ReceiveNew";
 import QuickShare from "./pages/QuickShare";
 import OfflineShare from "./pages/OfflineShareNew";
 import Auth from "./pages/Auth";
+import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -48,6 +50,7 @@ const AppContent = () => {
         <Route path="/quickshare" element={<QuickShare />} />
         <Route path="/receive" element={<Receive />} />
         <Route path="/offline-share" element={<OfflineShare />} />
+        <Route path="/history" element={<History />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -58,12 +61,14 @@ const AppContent = () => {
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AppContent />
-        <Analytics />
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AppContent />
+          <Analytics />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   </ErrorBoundary>
 );

@@ -8,6 +8,7 @@ import express from 'express';
 import { initializeFirebaseAdmin } from './config/firebase.js';
 import corsMiddleware from './middleware/cors.js';
 import sharesRouter from './routes/shares.js';
+import userRouter from './routes/user.js';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -39,6 +40,9 @@ app.get('/api/health', (req, res) => {
 
 // Share routes
 app.use('/api/shares', sharesRouter);
+
+// User routes (history and stats)
+app.use('/api/user', userRouter);
 
 // 404 handler
 app.use((req, res) => {

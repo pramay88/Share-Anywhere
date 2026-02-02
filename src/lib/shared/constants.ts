@@ -1,7 +1,7 @@
 // Shared constants used across frontend and backend
 
 // API Endpoints
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 export const API_ENDPOINTS = {
     SHARES: {
@@ -130,6 +130,6 @@ export const SUCCESS_MESSAGES = {
 export const APP_CONFIG = {
     APP_NAME: 'Share Anywhere',
     APP_VERSION: '2.0.0',
-    APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    APP_URL: import.meta.env.VITE_APP_URL || 'http://localhost:8080',
     SUPPORT_EMAIL: 'support@shareanywhere.com',
 } as const;
