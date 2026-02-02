@@ -35,6 +35,7 @@ import {
     Eye,
     Copy,
     Loader2,
+    Share,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -185,7 +186,7 @@ const History = () => {
         }
 
         try {
-            const downloadUrl = `/api/shares/${share.code}/download`;
+            const downloadUrl = `/send?code=${share.code}`;
             window.open(downloadUrl, "_blank");
             toast.success("Download started");
         } catch (error) {
@@ -371,7 +372,7 @@ const History = () => {
                                                             disabled={share.status === "expired"}
                                                             title={share.status === "expired" ? "Expired" : "Download"}
                                                         >
-                                                            <Download className="h-4 w-4" />
+                                                            <Share className="h-4 w-4" />
                                                         </Button>
                                                     )}
                                                 </div>

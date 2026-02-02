@@ -28,41 +28,53 @@ router.get('/:userId/history', publicRateLimiter, async (req, res) => {
         const now = new Date();
         const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-        // Query shares owned by this user (simple query without composite index)
-        const sharesSnapshot = await db
-            .collection('shares')
-            .where('ownerId', '==', userId)
+        // Query transfers owned by this user (using actual schema: transfers collection)
+        const transfersSnapshot = await db
+            .collection('transfers')
+            .where('owner_id', '==', userId)
             .get();
 
         const shares = [];
-        sharesSnapshot.forEach((doc) => {
+
+        // Process each transfer
+        for (const doc of transfersSnapshot.docs) {
             const data = doc.data();
 
-            // Filter by date in memory to avoid needing composite index
-            const createdAt = data.createdAt?.toDate();
+            // Filter by date in memory
+            const createdAt = data.created_at?.toDate();
             if (!createdAt || createdAt < twentyFourHoursAgo) {
-                return; // Skip shares older than 24 hours
+                continue; // Skip transfers older than 24 hours
             }
 
-            const expiresAt = data.expiresAt?.toDate();
+            const expiresAt = data.expires_at?.toDate();
             const isExpired = expiresAt && expiresAt < now;
 
+            // Get files for this transfer
+            const filesSnapshot = await db
+                .collection('transfers')
+                .doc(doc.id)
+                .collection('files')
+                .get();
+
+            const files = filesSnapshot.docs.map(f => f.data());
+            const totalSize = files.reduce((sum, f) => sum + (f.file_size || 0), 0);
+
             shares.push({
-                code: data.shareCode,
-                type: data.contentType,
-                fileName: data.fileName || null,
-                content: data.content || null,
-                size: data.fileSize || 0,
-                mimeType: data.mimeType || null,
+                code: data.share_code,
+                type: data.content_type === 'text' ? 'text' : 'file',
+                fileName: files.length > 0 ? files[0].original_name : (data.text_content ? 'Text' : null),
+                content: data.text_content || null,
+                size: totalSize || (data.text_content?.length || 0),
+                mimeType: files.length > 0 ? files[0].mime_type : 'text/plain',
                 createdAt: createdAt.toISOString(),
                 expiresAt: expiresAt ? expiresAt.toISOString() : null,
                 status: isExpired ? 'expired' : 'active',
-                downloadCount: data.downloadCount || 0,
-                cloudinaryPublicId: data.cloudinaryPublicId || null,
+                downloadCount: 0, // Not tracked in current schema
+                cloudinaryPublicId: files.length > 0 ? files[0].cloudinary_public_id : null,
             });
-        });
+        }
 
-        // Sort by creation date (newest first) in memory
+        // Sort by creation date (newest first)
         shares.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         res.json({
@@ -98,32 +110,47 @@ router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
 
         const db = getFirestore();
 
-        // Check if stats document exists
-        const statsDoc = await db.collection('userStats').doc(userId).get();
+        // Count user's transfers for stats
+        const transfersSnapshot = await db
+            .collection('transfers')
+            .where('owner_id', '==', userId)
+            .get();
 
-        if (statsDoc.exists) {
-            const stats = statsDoc.data();
-            return res.json({
-                success: true,
-                stats: {
-                    totalSends: stats.totalSends || 0,
-                    totalReceives: stats.totalReceives || 0,
-                    totalDataShared: stats.totalDataShared || 0,
-                    activeShares: stats.activeShares || 0,
-                    lastUpdated: stats.lastUpdated?.toDate().toISOString() || null,
-                },
+        const now = new Date();
+        let totalSends = 0;
+        let activeShares = 0;
+        let totalDataShared = 0;
+
+        for (const doc of transfersSnapshot.docs) {
+            const data = doc.data();
+            totalSends++;
+
+            // Check if active
+            const expiresAt = data.expires_at?.toDate();
+            if (!expiresAt || expiresAt > now) {
+                activeShares++;
+            }
+
+            // Get files to calculate total data
+            const filesSnapshot = await db
+                .collection('transfers')
+                .doc(doc.id)
+                .collection('files')
+                .get();
+
+            filesSnapshot.docs.forEach(f => {
+                totalDataShared += f.data().file_size || 0;
             });
         }
 
-        // If no stats exist yet, return zeros
         res.json({
             success: true,
             stats: {
-                totalSends: 0,
-                totalReceives: 0,
-                totalDataShared: 0,
-                activeShares: 0,
-                lastUpdated: null,
+                totalSends,
+                totalReceives: 0, // Not tracked in current schema
+                totalDataShared,
+                activeShares,
+                lastUpdated: new Date().toISOString(),
             },
         });
     } catch (error) {
