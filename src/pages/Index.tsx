@@ -76,36 +76,6 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Features */}
-          {/* <div className="grid md:grid-cols-3 gap-6 pt-12 max-w-4xl mx-auto">
-            <Card className="p-6 space-y-3 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Zap className="h-6 w-6" />
-              </div>
-              <h3 className="font-semibold text-lg">Lightning Fast</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Transfer files in seconds with our optimized infrastructure
-              </p>
-            </Card>
-            <Card className="p-6 space-y-3 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Shield className="h-6 w-6" />
-              </div>
-              <h3 className="font-semibold text-lg">Secure & Private</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                End-to-end encryption keeps your files safe and private
-              </p>
-            </Card>
-            <Card className="p-6 space-y-3 hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Smartphone className="h-6 w-6" />
-              </div>
-              <h3 className="font-semibold text-lg">Cross-Platform</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Works seamlessly across all your devices
-              </p>
-            </Card>
-          </div> */}
         </div>
       </section>
 

@@ -202,8 +202,8 @@ const Send = () => {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Send Files & Text</h1>
-            <p className="text-muted-foreground">Share files or text with a simple code</p>
+            <h1 className="text-2xl font-bold tracking-tight mb-2">Send Files & Text</h1>
+            {/* <p className="text-muted-foreground">Share files or text with a simple code</p> */}
           </div>
 
           <Card className="p-6">
@@ -283,27 +283,39 @@ const Send = () => {
                       {/* Compact File Summary */}
                       <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
                         <span>{(files.length > 0 ? files : fileInfo).length} File(s) Selected</span>
-                        <span>{((files.length > 0 ? files : fileInfo).reduce((acc, f) => acc + (f.size || 0), 0) / 1024 / 1024).toFixed(2)} MB Total</span>
+                        <span>{(((files.length > 0 ? files : fileInfo) as Array<{ size: number }>).reduce((acc, f) => acc + (f.size || 0), 0) / 1024 / 1024).toFixed(2)} MB Total</span>
                       </div>
 
                       {/* Unified Share Card */}
                       <div className="bg-card border rounded-lg overflow-hidden">
                         {/* Share Code Section */}
-                        <div className="bg-primary/5 p-4 text-center border-b border-border/50">
-                          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Share Code</p>
-                          <div className="text-3xl font-bold tracking-widest text-primary mb-3 font-mono">
-                            {code}
-                          </div>
-                          <div className="flex justify-center gap-2">
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="h-8 text-xs bg-background hover:bg-background/80"
+                        <div className="px-6 py-4 border-b border-border/50">
+
+                          {/* Code */}
+                          <div className="flex justify-center mb-4">
+                            <div
+                              className="flex gap-2 cursor-pointer"
+                              title="Copy Code"
                               onClick={copyCode}
                             >
-                              <Copy className="h-3 w-3 mr-1.5" />
-                              Copy
-                            </Button>
+                              {code.split("").map((char, i) => (
+                                <div
+                                  key={i}
+                                  className="w-12 h-12 flex items-center justify-center
+                                              font-mono text-xl font-bold
+                                              text-primary
+                                              border border-border
+                                              bg-background
+                                              rounded-md"
+                                >
+                                  {char}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex justify-center">
                             <Button
                               variant="secondary"
                               size="sm"
@@ -311,10 +323,11 @@ const Send = () => {
                               className="h-8 text-xs bg-background hover:bg-background/80"
                             >
                               <Share2 className="h-3 w-3 mr-1.5" />
-                              Link
+                              Share link
                             </Button>
                           </div>
                         </div>
+
 
                         {/* QR Code Section */}
                         <div className="p-4 flex flex-col items-center justify-center bg-white/50">
@@ -324,15 +337,15 @@ const Send = () => {
                           <p className="text-[10px] text-muted-foreground text-center mb-2">
                             Scan to download
                           </p>
-                          <Button
+                          {/* <Button
                             variant="ghost"
                             size="sm"
-                            onClick={shareQR}
+                            // onClick={shareQR}
                             className="h-7 text-xs"
                           >
                             <Share2 className="h-3 w-3 mr-1.5" />
                             Share QR
-                          </Button>
+                          </Button> */}
                         </div>
                       </div>
 
@@ -363,7 +376,7 @@ const Send = () => {
             </Tabs >
           </Card >
 
-          <div className="text-center mt-6">
+          {/* <div className="text-center mt-6">
             <Button
               variant="ghost"
               onClick={() => navigate("/receive")}
@@ -371,7 +384,8 @@ const Send = () => {
             >
               Want to receive files instead?
             </Button>
-          </div>
+          </div> */}
+
         </div >
       </div >
     </div >

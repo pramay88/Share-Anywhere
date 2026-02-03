@@ -232,7 +232,7 @@ class ApiClient {
 }
 
 // Export singleton instance with backend URL
-export const apiClient = new ApiClient(import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001');
+export const apiClient = new ApiClient(import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
 
 // Export class for testing
 export { ApiClient };

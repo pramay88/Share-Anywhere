@@ -39,28 +39,29 @@ export const Header = () => {
 
     return (
         <header className="w-full py-4 px-6 md:px-12 flex justify-between items-center border-b">
-            <div
-                className="flex items-center gap-2.5 cursor-pointer"
-                onClick={() => navigate("/")}
-            >
-                <img src="/logo.png" alt="ShareAnywhere" className="h-6 w-6 object-contain" />
+
+            {/* Logo */}
+            <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
+                <img src="/logo.png" alt="SA" className="h-6 w-6 object-contain" />
                 <span className="text-lg font-semibold">ShareAnywhere</span>
             </div>
 
+            {/* Navigation - Right */}
             <nav className="flex items-center gap-6">
-                <button
-                    onClick={() => navigate("/send")}
-                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
+
+                {/* Send */}
+                <button onClick={() => navigate("/send")}
+                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                     Send
                 </button>
-                <button
-                    onClick={() => navigate("/receive")}
-                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
+
+                {/* Receive */}
+                <button onClick={() => navigate("/receive")}
+                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                     Receive
                 </button>
 
+                {/* History */}
                 {user ? (
                     <>
                         <button
