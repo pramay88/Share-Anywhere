@@ -5,7 +5,10 @@
 
 import type { DataConnection } from 'peerjs';
 
-const CHUNK_SIZE = 64 * 1024; // 64KB chunks
+const CHUNK_SIZE = 256 * 1024; // 256KB chunks — larger = less overhead per chunk
+
+// Max buffered amount before we pause sending (1MB)
+const MAX_BUFFERED_AMOUNT = 1 * 1024 * 1024;
 
 // ============================================================================
 // Types
@@ -119,12 +122,33 @@ export function formatBytes(bytes: number): string {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+/**
+ * Wait for the data channel buffer to drain below threshold
+ */
+function waitForDrain(connection: DataConnection): Promise<void> {
+    return new Promise((resolve) => {
+        const dc = (connection as any)._dc as RTCDataChannel | undefined;
+        if (!dc || dc.bufferedAmount <= MAX_BUFFERED_AMOUNT) {
+            resolve();
+            return;
+        }
+
+        // Poll every 50ms for buffer to drain
+        const interval = setInterval(() => {
+            if (!dc || dc.bufferedAmount <= MAX_BUFFERED_AMOUNT) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 50);
+    });
+}
+
 // ============================================================================
 // Sender
 // ============================================================================
 
 /**
- * Send multiple files over a WebRTC connection
+ * Send multiple files over a WebRTC connection with backpressure control
  */
 export async function sendBatch(
     entries: FileEntry[],
@@ -156,7 +180,7 @@ export async function sendBatch(
         throw new Error('Transfer declined by receiver');
     }
 
-    // 3. Send each file
+    // 3. Send each file with backpressure
     const startTime = Date.now();
     let totalBytesTransferred = 0;
 
@@ -166,6 +190,9 @@ export async function sendBatch(
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
         for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+            // Backpressure: wait if buffer is full
+            await waitForDrain(connection);
+
             const start = chunkIdx * CHUNK_SIZE;
             const end = Math.min(start + CHUNK_SIZE, file.size);
             const chunk = file.slice(start, end);
@@ -183,22 +210,24 @@ export async function sendBatch(
 
             totalBytesTransferred += (end - start);
 
-            // Progress
-            const elapsed = (Date.now() - startTime) / 1000;
-            const speed = elapsed > 0 ? totalBytesTransferred / elapsed : 0;
-            const fileProgress = Math.round(((chunkIdx + 1) / totalChunks) * 100);
-            const overallProgress = Math.round((totalBytesTransferred / metadata.totalSize) * 100);
+            // Update progress every few chunks to avoid UI overhead
+            if (chunkIdx % 4 === 0 || chunkIdx === totalChunks - 1) {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = elapsed > 0 ? totalBytesTransferred / elapsed : 0;
+                const fileProgress = Math.round(((chunkIdx + 1) / totalChunks) * 100);
+                const overallProgress = Math.round((totalBytesTransferred / metadata.totalSize) * 100);
 
-            onProgress?.({
-                totalFiles: entries.length,
-                completedFiles: fileIdx,
-                currentFileName: file.name,
-                currentFileProgress: fileProgress,
-                overallProgress,
-                speed,
-                bytesTransferred: totalBytesTransferred,
-                totalBytes: metadata.totalSize,
-            });
+                onProgress?.({
+                    totalFiles: entries.length,
+                    completedFiles: fileIdx,
+                    currentFileName: file.name,
+                    currentFileProgress: fileProgress,
+                    overallProgress,
+                    speed,
+                    bytesTransferred: totalBytesTransferred,
+                    totalBytes: metadata.totalSize,
+                });
+            }
         }
 
         // File complete
