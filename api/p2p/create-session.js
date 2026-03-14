@@ -2,19 +2,27 @@ import admin from 'firebase-admin';
 
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-// Initialize Firebase Admin (only once per function)
-if (!admin.apps.length) {
-    const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (!serviceAccountKey) {
-        throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.');
+/**
+ * Safely initialize Firebase Admin
+ */
+function getDb() {
+    if (!admin.apps.length) {
+        const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+        if (!serviceAccountKey) {
+            return null;
+        }
+        try {
+            const credentials = JSON.parse(Buffer.from(serviceAccountKey, 'base64').toString());
+            admin.initializeApp({
+                credential: admin.credential.cert(credentials),
+            });
+        } catch (e) {
+            console.error('Firebase init error:', e);
+            return null;
+        }
     }
-    const credentials = JSON.parse(Buffer.from(serviceAccountKey, 'base64').toString());
-    admin.initializeApp({
-        credential: admin.credential.cert(credentials),
-    });
+    return admin.firestore();
 }
-
-const db = admin.firestore();
 
 /**
  * Generate a random 6-char alphanumeric code
@@ -29,11 +37,28 @@ function generateCode() {
 }
 
 export default async function handler(req, res) {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ success: false, error: 'Method not allowed' });
     }
 
     try {
+        const db = getDb();
+        if (!db) {
+            return res.status(500).json({
+                success: false,
+                error: 'Server configuration error: Firebase not initialized. Check FIREBASE_SERVICE_ACCOUNT_KEY env var.',
+            });
+        }
+
         const { peerId } = req.body;
 
         if (!peerId || typeof peerId !== 'string') {
@@ -65,6 +90,7 @@ export default async function handler(req, res) {
         await db.collection('p2p_sessions').doc(code).set({
             peerId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + SESSION_TTL_MS),
             receiverJoined: false,
         });
 
@@ -81,7 +107,7 @@ export default async function handler(req, res) {
         console.error('Error creating P2P session:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to create session',
+            error: 'Failed to create session: ' + (error.message || 'Unknown error'),
         });
     }
 }
