@@ -3,25 +3,37 @@ import admin from 'firebase-admin';
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Safely initialize Firebase Admin
+ * Safely initialize Firebase Admin — returns { db, error }
  */
 function getDb() {
-    if (!admin.apps.length) {
-        const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-        if (!serviceAccountKey) {
-            return null;
-        }
-        try {
-            const credentials = JSON.parse(Buffer.from(serviceAccountKey, 'base64').toString());
+    try {
+        if (!admin.apps.length) {
+            const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+            if (!serviceAccountKey) {
+                return { db: null, error: 'FIREBASE_SERVICE_ACCOUNT_KEY env var is empty or missing' };
+            }
+
+            let credentials;
+            try {
+                const decoded = Buffer.from(serviceAccountKey, 'base64').toString('utf-8');
+                credentials = JSON.parse(decoded);
+            } catch (parseErr) {
+                // Maybe it's raw JSON, not base64
+                try {
+                    credentials = JSON.parse(serviceAccountKey);
+                } catch (rawErr) {
+                    return { db: null, error: `Failed to parse key (tried base64 and raw JSON): ${parseErr.message}` };
+                }
+            }
+
             admin.initializeApp({
                 credential: admin.credential.cert(credentials),
             });
-        } catch (e) {
-            console.error('Firebase init error:', e);
-            return null;
         }
+        return { db: admin.firestore(), error: null };
+    } catch (e) {
+        return { db: null, error: `Firebase init exception: ${e.message}` };
     }
-    return admin.firestore();
 }
 
 /**
@@ -51,11 +63,11 @@ export default async function handler(req, res) {
     }
 
     try {
-        const db = getDb();
+        const { db, error: dbError } = getDb();
         if (!db) {
             return res.status(500).json({
                 success: false,
-                error: 'Server configuration error: Firebase not initialized. Check FIREBASE_SERVICE_ACCOUNT_KEY env var.',
+                error: `Firebase not available: ${dbError}`,
             });
         }
 
@@ -80,7 +92,6 @@ export default async function handler(req, res) {
                     error: 'Failed to generate unique code. Try again.',
                 });
             }
-            // Check if code exists
             const docRef = db.collection('p2p_sessions').doc(code);
             const doc = await docRef.get();
             if (!doc.exists) break;
