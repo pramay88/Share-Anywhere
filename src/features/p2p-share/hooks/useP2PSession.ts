@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // PeerJS config
 const PEERJS_CONFIG = {
@@ -71,7 +71,7 @@ export function useP2PSession(): UseP2PSessionReturn {
 
         // Delete session from server
         if (shareCodeRef.current) {
-            fetch(`${API_BASE}/api/p2p/session/${shareCodeRef.current}`, {
+            fetch(`${API_BASE}/p2p/session/${shareCodeRef.current}`, {
                 method: 'DELETE',
             }).catch(() => {});
             shareCodeRef.current = null;
@@ -106,7 +106,7 @@ export function useP2PSession(): UseP2PSessionReturn {
             peerRef.current = peer;
 
             // 2. Register session on server
-            const response = await fetch(`${API_BASE}/api/p2p/create-session`, {
+            const response = await fetch(`${API_BASE}/p2p/create-session`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ peerId }),
@@ -165,7 +165,7 @@ export function useP2PSession(): UseP2PSessionReturn {
             const upperCode = code.toUpperCase().trim();
 
             // 1. Get sender's peer ID from server
-            const response = await fetch(`${API_BASE}/api/p2p/join/${upperCode}`);
+            const response = await fetch(`${API_BASE}/p2p/join/${upperCode}`);
             const data = await response.json();
 
             if (!data.success) {
