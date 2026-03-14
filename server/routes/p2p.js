@@ -4,7 +4,6 @@
  */
 
 import express from 'express';
-import { publicRateLimiter, createRateLimiter } from '../middleware/cors.js';
 
 const router = express.Router();
 
