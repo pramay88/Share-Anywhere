@@ -46,26 +46,24 @@ export const Header = () => {
                 <span className="text-lg font-semibold">ShareAnywhere</span>
             </div>
 
-            {/* Navigation - Right */}
-            <nav className="flex items-center gap-6">
-
-                {/* Send */}
+            {/* Center Navigation */}
+            <nav className="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
                 <button onClick={() => navigate("/send")}
-                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                     Send
                 </button>
-
-                {/* Receive */}
+                <button onClick={() => navigate("/p2p")}
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    P2P Share
+                </button>
                 <button onClick={() => navigate("/receive")}
-                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                     Receive
                 </button>
+            </nav>
 
-                {/* P2P Share */}
-                <button onClick={() => navigate("/p2p")}
-                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                    P2P
-                </button>
+            {/* Right - Auth */}
+            <nav className="flex items-center gap-6">
 
                 {/* History */}
                 {user ? (
