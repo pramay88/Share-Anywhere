@@ -61,6 +61,12 @@ export const Header = () => {
                     Receive
                 </button>
 
+                {/* P2P Share */}
+                <button onClick={() => navigate("/p2p")}
+                    className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    P2P
+                </button>
+
                 {/* History */}
                 {user ? (
                     <>
