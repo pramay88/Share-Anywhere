@@ -23,12 +23,11 @@ const Index = () => {
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="space-y-4">
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-              Share Files & Text Instantly
+              Share Files & Text
             </h1>
 
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Transfer files up to 50MB or share text snippets with just a code or QR scan.
-              No signup required.
+              Transfer files or share text snippets with just a code or QR scan.
             </p>
           </div>
 
@@ -63,16 +62,16 @@ const Index = () => {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto pt-12">
             <div className="text-center space-y-1">
-              <div className="text-3xl md:text-4xl font-bold">50MB</div>
-              <div className="text-sm text-muted-foreground">Max Size</div>
+              {/* <div className="text-3xl md:text-4xl font-bold">50MB</div> */}
+              {/* <div className="text-sm text-muted-foreground">Max Size</div> */}
             </div>
             <div className="text-center space-y-1">
-              <div className="text-3xl md:text-4xl font-bold">24h</div>
-              <div className="text-sm text-muted-foreground">Retention</div>
+              {/* <div className="text-3xl md:text-4xl font-bold">24h</div> */}
+              {/* <div className="text-sm text-muted-foreground">Retention</div> */}
             </div>
             <div className="text-center space-y-1">
-              <div className="text-3xl md:text-4xl font-bold">Free</div>
-              <div className="text-sm text-muted-foreground">Forever</div>
+              {/* <div className="text-3xl md:text-4xl font-bold">Free</div> */}
+              {/* <div className="text-sm text-muted-foreground">Forever</div> */}
             </div>
           </div>
 
