@@ -27,83 +27,41 @@ const log = {
 /**
  * ICE server configuration.
  *
- * TURN servers are critical for cross-network transfers (different WiFi,
- * mobile LTE, etc.). Without a working TURN server, WebRTC falls back to
- * a direct connection attempt that often fails through NAT, resulting in
- * KB/s speeds or failed connections.
+ * Same-network (WiFi/hotspot): STUN only — WebRTC finds the local IP
+ * directly and connects peer-to-peer. No TURN needed, no relay overhead.
  *
- * Recommended setup (set in Vercel environment variables):
+ * Cross-network (different WiFi, mobile data): needs TURN relay.
+ * Set VITE_TURN_URL + VITE_TURN_USERNAME + VITE_TURN_CREDENTIAL in
+ * Vercel env vars for cross-network support. Without these, cross-network
+ * transfers will fail or be very slow (no relay available).
  *
- *   Option A — Metered.ca free tier (recommended, 100 GB/month free):
- *     VITE_METERED_API_KEY = your-api-key-from-metered.ca
- *     The hook will fetch fresh TURN credentials automatically.
- *
- *   Option B — Self-hosted / paid TURN (Coturn, Cloudflare, etc.):
- *     VITE_TURN_URL        = turn:your-server.example.com:443
- *     VITE_TURN_USERNAME   = username
- *     VITE_TURN_CREDENTIAL = password
- *
- *   Option C — No config (current):
- *     Falls back to openrelay.metered.ca public TURN.
- *     Works but is rate-limited, shared, and capped ~1 Mbps.
- *     Cross-network transfers will be slow.
+ * Why no openrelay fallback anymore:
+ * Including public TURN servers even as a fallback causes the ICE agent
+ * to sometimes pick the relay candidate over the direct local one — even
+ * on same WiFi — because the relay responds faster during negotiation.
+ * This was causing 20 KB/s on same-WiFi connections in production.
+ * STUN-only for no-config is the correct default: fast on same-network,
+ * gracefully degraded (connection may fail) cross-network.
  */
-
-let cachedIceServers: RTCIceServer[] | null = null;
-let iceServersFetchedAt = 0;
-const ICE_CACHE_TTL = 5 * 60 * 1000; // 5 min — Metered credentials expire in 1 hr
-
-async function buildIceServers(): Promise<RTCIceServer[]> {
-    const now = Date.now();
-
-    // Return cached servers if fresh
-    if (cachedIceServers && now - iceServersFetchedAt < ICE_CACHE_TTL) {
-        return cachedIceServers;
-    }
-
+function buildIceServers(): RTCIceServer[] {
     const servers: RTCIceServer[] = [
+        // Two STUN servers for redundancy — discovers public IP, enables
+        // direct peer-to-peer on same network without any relay
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
     ];
 
-    // Option A: Metered.ca dynamic credentials (best for cross-network)
-    const meteredKey = import.meta.env.VITE_METERED_API_KEY;
-    if (meteredKey) {
-        try {
-            const res = await fetch(
-                `https://speakapp.metered.live/api/v1/turn/credentials?apiKey=${meteredKey}`,
-                { signal: AbortSignal.timeout(5_000) }
-            );
-            if (res.ok) {
-                const creds: RTCIceServer[] = await res.json();
-                servers.push(...creds);
-                cachedIceServers = servers;
-                iceServersFetchedAt = now;
-                return servers;
-            }
-        } catch {
-            // Fall through to static config
-        }
-    }
-
-    // Option B: Static TURN credentials from env
+    // Optional TURN relay for cross-network transfers
+    // Set these in Vercel Dashboard → Settings → Environment Variables
     const turnUrl = import.meta.env.VITE_TURN_URL;
     const turnUser = import.meta.env.VITE_TURN_USERNAME;
     const turnCred = import.meta.env.VITE_TURN_CREDENTIAL;
 
     if (turnUrl && turnUser && turnCred) {
         servers.push({ urls: turnUrl, username: turnUser, credential: turnCred });
-    } else {
-        // Option C: Public openrelay fallback
-        servers.push(
-            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-        );
     }
+    // No fallback TURN — see comment above for why
 
-    cachedIceServers = servers;
-    iceServersFetchedAt = now;
     return servers;
 }
 
@@ -228,7 +186,7 @@ export function useP2PSession(): UseP2PSessionReturn {
         }
 
         // Fetch ICE servers (cached after first call within TTL)
-        const iceServers = await buildIceServers();
+        const iceServers = buildIceServers();
 
         return new Promise((resolve, reject) => {
             const peer = new Peer(peerId, {
@@ -283,6 +241,7 @@ export function useP2PSession(): UseP2PSessionReturn {
                         await waitForReadyPong(conn);
                         setConnection(conn);
                         setStatus('connected');
+                        console.log('[P2P] Sender ready, connection open');
                     } catch (err: any) {
                         log.error('Ready handshake failed:', err);
                         setError('Connection handshake failed — please try again');

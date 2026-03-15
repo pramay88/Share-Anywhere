@@ -1,18 +1,13 @@
 /**
- * P2P Transfer Service — v4
+ * P2P Transfer Service — v5
  *
- * Key design points:
- *  - Adaptive chunk size: 16 KB over TURN relay, 64 KB for direct P2P
- *    (large chunks over relay cause head-of-line blocking; 16 KB matches
- *     the TURN server's typical MTU and reduces retransmit cost)
- *  - Correct backpressure: low water mark of 64 KB, NOT 2-4 MB
- *    (the old 4 MB high-water was bypassing SCTP congestion control —
- *     worked on desktop LAN, collapsed on mobile and cross-network)
- *  - Let SCTP do its job: we keep the pipe just full enough (one drain
- *     cycle = one chunk) so the browser's own congestion window adapts
- *     correctly to both fast desktop links and slow mobile/relay links
+ * Design:
+ *  - 16 KB universal chunk size (safe on mobile, TURN relay, and direct LAN)
+ *  - Backpressure: HIGH_WATER=128KB pause, LOW_THRESHOLD=16KB resume
+ *    (LOW > 0 keeps one chunk always in-flight so SCTP never idles)
  *  - Per-file SHA-256 integrity via SubtleCrypto
- *  - Cancellation via AbortSignal, connection-drop detection, idle timeout
+ *  - Cancellation via AbortSignal on both sides
+ *  - Connection-drop detection, idle timeout, settled-once guard
  *  - Progress throttled via requestAnimationFrame
  */
 
@@ -23,32 +18,33 @@ import type { DataConnection } from 'peerjs';
 // ---------------------------------------------------------------------------
 
 /**
- * Chunk sizes tuned per connection type.
+ * 16 KB universal chunk size.
  *
- * Direct (LAN/same-network): 64 KB — maximises throughput, SCTP handles it.
- * Relay (TURN): 16 KB — TURN servers relay UDP packets; large chunks get
- *   fragmented and retransmitted more expensively. 16 KB stays under the
- *   typical TURN relay MTU and lets SCTP slow-start work properly.
+ * Previously used 64 KB (direct) / 16 KB (relay) with runtime detection,
+ * but detection relied on PeerJS internals (_pc / peerConnection) that are
+ * mangled by Vite's production minifier — always returned 'unknown', falling
+ * back to 64 KB chunks with BUFFER_LOW_THRESHOLD=0, causing a full stop-start
+ * on every chunk and ~100 KB/s on production even on same-WiFi.
+ *
+ * 16 KB works correctly everywhere without any detection:
+ *  - Same-WiFi: reaches 5+ MB/s (more chunks, negligible overhead per chunk)
+ *  - Mobile: well within mobile SCTP buffer limits (~256 KB)
+ *  - TURN relay: under typical relay MTU, minimises retransmit cost
  */
-const CHUNK_SIZE_DIRECT = 64 * 1024;  // 64 KB
-const CHUNK_SIZE_RELAY = 16 * 1024;  // 16 KB
+const CHUNK_SIZE = 16 * 1024; // 16 KB
 
 /**
- * Backpressure threshold.
+ * Backpressure window.
  *
- * We pause sending when bufferedAmount exceeds this and resume when it
- * drops below. The value must be SMALL — just enough to keep one chunk
- * in flight. This lets the browser's SCTP congestion control operate
- * normally. The old 4 MB value was wrong: it flooded the send buffer,
- * bypassing congestion control, which worked on a desktop LAN but
- * collapsed on mobile (small SCTP buffer ~256 KB) and TURN relay.
+ * HIGH_WATER (128 KB = 8 chunks): pause sending when bufferedAmount exceeds this.
+ * LOW_THRESHOLD (16 KB = 1 chunk): resume sending once buffer drains below this.
  *
- * Rule of thumb: HIGH_WATER = 2× the chunk size you're sending.
- * LOW_THRESHOLD = 0 (drain completely before sending next chunk).
+ * LOW_THRESHOLD must NOT be 0. Draining to zero waits for the OS to fully
+ * flush each chunk before sending the next — a full RTT stall per chunk.
+ * Keeping one chunk worth of data as the threshold ensures SCTP never idles.
  */
-const BUFFER_HIGH_WATER_DIRECT = CHUNK_SIZE_DIRECT * 2;  // 128 KB
-const BUFFER_HIGH_WATER_RELAY = CHUNK_SIZE_RELAY * 2;  //  32 KB
-const BUFFER_LOW_THRESHOLD = 0;  // drain fully — let SCTP refill at its own pace
+const BUFFER_HIGH_WATER = CHUNK_SIZE * 8; // 128 KB
+const BUFFER_LOW_THRESHOLD = CHUNK_SIZE * 1; //  16 KB
 
 const ACCEPT_TIMEOUT_MS = 30_000;
 const RECEIVE_IDLE_TIMEOUT_MS = 60_000;
@@ -59,7 +55,6 @@ const RECEIVE_IDLE_TIMEOUT_MS = 60_000;
 
 const isDev = typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV === true;
 const log = {
-    info: (...a: unknown[]) => isDev && console.info('[P2P]', ...a),
     warn: (...a: unknown[]) => isDev && console.warn('[P2P]', ...a),
     error: (...a: unknown[]) => isDev && console.error('[P2P]', ...a),
 };
@@ -70,6 +65,7 @@ const log = {
 
 export interface FileEntry {
     file: File;
+    /** e.g. "folder/sub/file.txt" or just "file.txt" */
     relativePath: string;
 }
 
@@ -113,13 +109,12 @@ export interface TransferProgress {
     totalFiles: number;
     completedFiles: number;
     currentFileName: string;
-    currentFileProgress: number;
-    overallProgress: number;
+    currentFileProgress: number; // 0-100
+    overallProgress: number;     // 0-100
     speed: number;               // bytes/sec
     bytesTransferred: number;
     totalBytes: number;
     eta: number;                 // seconds remaining
-    connectionType: 'direct' | 'relay' | 'unknown';
 }
 
 export interface PendingBatchTransfer {
@@ -131,6 +126,7 @@ export interface PendingBatchTransfer {
 export interface ReceivedFile {
     blob: Blob;
     metadata: FileMetadataEntry;
+    /** true if SHA-256 matched, or sender did not send a hash */
     integrityOk: boolean;
 }
 
@@ -171,7 +167,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatEta(seconds: number): string {
-    if (!isFinite(seconds) || seconds <= 0) return '–';
+    if (!isFinite(seconds) || seconds <= 0) return '-';
     if (seconds < 60) return `${Math.round(seconds)}s`;
     return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
@@ -183,17 +179,26 @@ export function formatEta(seconds: number): string {
 async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
     const digest = await crypto.subtle.digest('SHA-256', buffer);
     return Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, '0')).join('');
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
 }
 
 function concatBuffers(chunks: ArrayBuffer[]): ArrayBuffer {
     const total = chunks.reduce((s, c) => s + c.byteLength, 0);
     const out = new Uint8Array(total);
     let offset = 0;
-    for (const c of chunks) { out.set(new Uint8Array(c), offset); offset += c.byteLength; }
+    for (const c of chunks) {
+        out.set(new Uint8Array(c), offset);
+        offset += c.byteLength;
+    }
     return out.buffer;
 }
 
+/**
+ * Safely find the underlying RTCDataChannel from a PeerJS DataConnection.
+ * Tries all known property names then falls back to a full key scan so it
+ * survives production minification where _dc becomes a single letter.
+ */
 function getRTCDataChannel(conn: DataConnection): RTCDataChannel | null {
     const c = conn as any;
     for (const candidate of [c.dataChannel, c._dc, c._channel, c.channel]) {
@@ -206,46 +211,9 @@ function getRTCDataChannel(conn: DataConnection): RTCDataChannel | null {
 }
 
 /**
- * Detect whether the active ICE candidate pair is using a TURN relay.
- * Returns 'relay', 'direct', or 'unknown' (if stats API unavailable).
- *
- * This determines the chunk size and buffer thresholds to use.
- * Mobile browsers and cross-network connections typically fall back to TURN.
- */
-async function detectConnectionType(
-    conn: DataConnection
-): Promise<'direct' | 'relay' | 'unknown'> {
-    try {
-        const dc = getRTCDataChannel(conn);
-        if (!dc) return 'unknown';
-
-        // Walk up to the RTCPeerConnection via the DataChannel
-        // PeerJS exposes it as conn.peerConnection or conn._pc
-        const pc: RTCPeerConnection | undefined =
-            (conn as any).peerConnection ??
-            (conn as any)._pc ??
-            (conn as any).pc;
-
-        if (!pc || typeof pc.getStats !== 'function') return 'unknown';
-
-        const stats = await pc.getStats();
-        for (const report of stats.values()) {
-            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                const local = stats.get(report.localCandidateId);
-                if (local?.candidateType === 'relay') return 'relay';
-                return 'direct';
-            }
-        }
-        return 'unknown';
-    } catch {
-        return 'unknown';
-    }
-}
-
-/**
- * Prime the DataChannel's bufferedAmountLowThreshold.
- * Must be called before each send loop so the event fires correctly
- * on every file transfer, not just the first.
+ * Set bufferedAmountLowThreshold before each send loop.
+ * Called once per file so the threshold is always live, even after
+ * the DataChannel was quiet between files.
  */
 function primeDataChannel(conn: DataConnection): void {
     const dc = getRTCDataChannel(conn);
@@ -253,16 +221,13 @@ function primeDataChannel(conn: DataConnection): void {
 }
 
 /**
- * Pause sending until the buffer drains below the threshold.
- *
- * High-water mark is kept deliberately small (128 KB direct, 32 KB relay)
- * so SCTP's own congestion window can adapt to the link. Flooding the
- * buffer with 4 MB (old approach) bypassed congestion control entirely —
- * fast on desktop LAN but catastrophic on mobile and TURN relay.
+ * Pause sending when the DataChannel buffer hits the high-water mark.
+ * Resumes via the native bufferedamountlow event (set by primeDataChannel).
+ * A 5s safety timeout ensures a silently-closed channel never hangs the loop.
  */
-function waitForDrain(conn: DataConnection, highWater: number): Promise<void> {
+function waitForDrain(conn: DataConnection): Promise<void> {
     const dc = getRTCDataChannel(conn);
-    if (!dc || dc.bufferedAmount < highWater) return Promise.resolve();
+    if (!dc || dc.bufferedAmount < BUFFER_HIGH_WATER) return Promise.resolve();
 
     return new Promise<void>((resolve) => {
         const fallback = setTimeout(resolve, 5_000);
@@ -282,7 +247,10 @@ function makeProgressEmitter(cb?: (p: TransferProgress) => void) {
         emit(p: TransferProgress) {
             latest = p;
             if (cb && rafId === null) {
-                rafId = requestAnimationFrame(() => { rafId = null; if (latest) cb(latest); });
+                rafId = requestAnimationFrame(() => {
+                    rafId = null;
+                    if (latest) cb(latest);
+                });
             }
         },
         flush() {
@@ -320,17 +288,13 @@ export async function sendBatch(
     signal?.throwIfAborted();
 
     signal?.addEventListener('abort', () => {
-        try { connection.send({ type: 'cancel', transferId, error: 'Cancelled by sender' } satisfies P2PMessage); } catch { /* best-effort */ }
+        try {
+            connection.send({ type: 'cancel', transferId, error: 'Cancelled by sender' } satisfies P2PMessage);
+        } catch { /* connection may already be closed */ }
     });
 
-    // Detect relay vs direct BEFORE starting — determines chunk size and buffer limits
-    const connType = await detectConnectionType(connection);
-    const chunkSize = connType === 'relay' ? CHUNK_SIZE_RELAY : CHUNK_SIZE_DIRECT;
-    const highWater = connType === 'relay' ? BUFFER_HIGH_WATER_RELAY : BUFFER_HIGH_WATER_DIRECT;
-
-    log.info(`Connection type: ${connType}, chunk: ${chunkSize / 1024}KB, highWater: ${highWater / 1024}KB`);
-
-    // Arm listener BEFORE sending to avoid the race where accept arrives first
+    // Arm accept listener BEFORE sending batch-request — avoids the race where
+    // a fast receiver sends 'accept' before we start listening for it.
     const acceptPromise = waitForAccept(connection, transferId, signal);
     connection.send({ type: 'batch-request', transferId, metadata } satisfies P2PMessage);
 
@@ -344,25 +308,21 @@ export async function sendBatch(
         signal?.throwIfAborted();
 
         const { file } = entries[fileIdx];
-        const totalChunks = Math.ceil(file.size / chunkSize) || 1;
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE) || 1;
 
-        // Single read — hash and chunks both come from this buffer
+        // Single read — reuse buffer for both chunking and hashing
         const fullBuffer = await file.arrayBuffer();
-        const integrityPromise = sha256Hex(fullBuffer);
+        const integrityPromise = sha256Hex(fullBuffer); // runs concurrently with sends
 
-        // Prime threshold before loop — must run on every file
+        // Prime threshold before loop so bufferedamountlow fires on every file
         primeDataChannel(connection);
 
         for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
             signal?.throwIfAborted();
+            await waitForDrain(connection);
 
-            // Wait for buffer to drain before sending next chunk.
-            // Small high-water mark lets SCTP congestion control work correctly
-            // across both fast desktop links and slow mobile/relay connections.
-            await waitForDrain(connection, highWater);
-
-            const start = chunkIdx * chunkSize;
-            const end = Math.min(start + chunkSize, file.size);
+            const start = chunkIdx * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
 
             connection.send({
                 type: 'chunk',
@@ -388,7 +348,6 @@ export async function sendBatch(
                 bytesTransferred: totalBytesTransferred,
                 totalBytes: metadata.totalSize,
                 eta: speed > 0 ? (metadata.totalSize - totalBytesTransferred) / speed : Infinity,
-                connectionType: connType,
             });
         }
 
@@ -416,6 +375,7 @@ function waitForAccept(
         );
         const onClose = () => { cleanup(); reject(new Error('Connection closed while waiting for accept')); };
         const onAbort = () => { cleanup(); reject(signal!.reason); };
+
         const handler = (data: unknown) => {
             if (typeof data === 'string') return;
             const msg = data as P2PMessage;
@@ -423,12 +383,14 @@ function waitForAccept(
             if (msg.type === 'accept') { cleanup(); setTimeout(() => resolve(true), 200); }
             else if (msg.type === 'reject') { cleanup(); resolve(false); }
         };
+
         function cleanup() {
             clearTimeout(timeout);
             connection.off('data', handler);
             connection.off('close', onClose);
             signal?.removeEventListener('abort', onAbort);
         }
+
         connection.on('data', handler);
         connection.once('close', onClose);
         signal?.addEventListener('abort', onAbort);
@@ -460,7 +422,7 @@ export function listenForBatchRequest(
     return () => connection.off('data', handler);
 }
 
-/** @deprecated Use acceptAndReceive() to avoid a race condition. */
+/** @deprecated Use acceptAndReceive() — calling this then receiveBatch() separately has a race condition. */
 export function acceptBatchTransfer(pending: PendingBatchTransfer): void {
     pending.connection.send({ type: 'accept', transferId: pending.transferId } satisfies P2PMessage);
 }
@@ -471,7 +433,8 @@ export function rejectBatchTransfer(pending: PendingBatchTransfer): void {
 
 /**
  * Accept and begin receiving atomically.
- * Attaches the data handler FIRST, then sends 'accept'.
+ * Wires the data handler FIRST, then sends 'accept' — so no chunks arrive
+ * before the receiver is listening.
  */
 export function acceptAndReceive(
     pending: PendingBatchTransfer,
@@ -489,10 +452,6 @@ export async function receiveBatch(
     signal?: AbortSignal
 ): Promise<ReceivedFile[]> {
     signal?.throwIfAborted();
-
-    // Detect connection type on receiver side too (for progress reporting)
-    const connType = await detectConnectionType(pending.connection);
-    const chunkSize = connType === 'relay' ? CHUNK_SIZE_RELAY : CHUNK_SIZE_DIRECT;
 
     return new Promise((resolve, reject) => {
         const { metadata, connection, transferId } = pending;
@@ -515,10 +474,11 @@ export async function receiveBatch(
 
         const resetIdleTimer = () => {
             clearTimeout(idleTimer);
-            idleTimer = setTimeout(
-                () => settle(() => reject(new Error(`Receive timed out — no data for ${RECEIVE_IDLE_TIMEOUT_MS / 1000} s`))),
-                RECEIVE_IDLE_TIMEOUT_MS
-            );
+            idleTimer = setTimeout(() => {
+                settle(() => reject(new Error(
+                    `Receive timed out - no data for ${RECEIVE_IDLE_TIMEOUT_MS / 1000} s`
+                )));
+            }, RECEIVE_IDLE_TIMEOUT_MS);
         };
 
         function cleanup() {
@@ -531,7 +491,13 @@ export async function receiveBatch(
 
         const onClose = () => settle(() => reject(new Error('Connection closed before transfer completed')));
         const onAbort = () => {
-            try { connection.send({ type: 'cancel', transferId, error: 'Cancelled by receiver' } satisfies P2PMessage); } catch { /* best-effort */ }
+            try {
+                connection.send({
+                    type: 'cancel',
+                    transferId,
+                    error: 'Cancelled by receiver',
+                } satisfies P2PMessage);
+            } catch { /* best-effort */ }
             settle(() => reject(signal!.reason));
         };
 
@@ -560,7 +526,7 @@ export async function receiveBatch(
                         const elapsed = (Date.now() - startTime) / 1000;
                         const speed = elapsed > 0 ? totalBytesReceived / elapsed : 0;
                         const fileMeta = metadata.files[fIdx];
-                        const totalFileChunks = msg.totalChunks ?? (Math.ceil(fileMeta.size / chunkSize) || 1);
+                        const totalFileChunks = msg.totalChunks ?? (Math.ceil(fileMeta.size / CHUNK_SIZE) || 1);
 
                         progress.emit({
                             totalFiles: metadata.totalFiles,
@@ -572,7 +538,6 @@ export async function receiveBatch(
                             bytesTransferred: totalBytesReceived,
                             totalBytes: metadata.totalSize,
                             eta: speed > 0 ? (metadata.totalSize - totalBytesReceived) / speed : Infinity,
-                            connectionType: connType,
                         });
                         break;
                     }
@@ -581,18 +546,29 @@ export async function receiveBatch(
                         const fIdx = msg.fileIndex!;
                         const fileMeta = metadata.files[fIdx];
                         const chunks = fileChunks[fIdx];
-                        const expectedChunks = Math.ceil(fileMeta.size / chunkSize) || 1;
+                        const expectedChunks = Math.ceil(fileMeta.size / CHUNK_SIZE) || 1;
+
                         for (let i = 0; i < expectedChunks; i++) {
                             if (!chunks[i]) chunks[i] = new ArrayBuffer(0);
                         }
+
                         const combined = concatBuffers(chunks as ArrayBuffer[]);
                         let integrityOk = true;
+
                         if (msg.sha256) {
                             const actualHash = await sha256Hex(combined);
                             integrityOk = actualHash === msg.sha256;
-                            if (!integrityOk) log.warn(`Integrity check failed for "${fileMeta.name}"`);
+                            if (!integrityOk) {
+                                log.warn(`Integrity check failed for "${fileMeta.name}"`);
+                            }
                         }
-                        results.push({ blob: new Blob([combined], { type: fileMeta.type }), metadata: fileMeta, integrityOk });
+
+                        results.push({
+                            blob: new Blob([combined], { type: fileMeta.type }),
+                            metadata: fileMeta,
+                            integrityOk,
+                        });
+
                         fileChunks[fIdx] = [];
                         completedFiles++;
                         break;
@@ -603,7 +579,9 @@ export async function receiveBatch(
                         break;
 
                     case 'cancel':
-                        settle(() => reject(new Error(`Transfer cancelled by sender: ${msg.error ?? 'unknown reason'}`)));
+                        settle(() => reject(new Error(
+                            `Transfer cancelled by sender: ${msg.error ?? 'unknown reason'}`
+                        )));
                         break;
 
                     case 'error':
@@ -626,15 +604,21 @@ export async function receiveBatch(
 export function downloadSingleFile(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename; a.style.display = 'none';
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
 }
 
 export function downloadAllFiles(results: ReceivedFile[]): void {
     for (const result of results) {
         if (!result.integrityOk) {
-            log.warn(`Skipping "${result.metadata.name}" — integrity check failed`);
+            log.warn(`Skipping "${result.metadata.name}" - integrity check failed`);
             continue;
         }
         downloadSingleFile(result.blob, result.metadata.name);
