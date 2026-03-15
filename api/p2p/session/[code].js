@@ -1,3 +1,4 @@
+// /api/p2p/session/[code].js
 import admin from 'firebase-admin';
 
 /**

@@ -1,3 +1,4 @@
+// /api/p2p/join/[code].js
 import admin from 'firebase-admin';
 
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes

@@ -1,3 +1,4 @@
+// src/pages/p2pshare.tsx
 /**
  * P2P Share Page
  * Code-based peer-to-peer file sharing — no size limits
@@ -16,9 +17,8 @@ import {
     filesToEntries,
     sendBatch,
     listenForBatchRequest,
-    acceptBatchTransfer,
     rejectBatchTransfer,
-    receiveBatch,
+    acceptAndReceive,          // ← replaces the broken acceptBatchTransfer + receiveBatch pair
     downloadAllFiles,
     formatBytes,
     type FileEntry,
@@ -43,6 +43,8 @@ const P2PShare = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
     const cleanupListenerRef = useRef<(() => void) | null>(null);
+    // AbortController so the user can cancel an in-progress transfer
+    const transferAbortRef = useRef<AbortController | null>(null);
 
     const {
         role,
@@ -76,7 +78,6 @@ const P2PShare = () => {
         const entries = filesToEntries(files);
         setSelectedFiles((prev) => [...prev, ...entries]);
         setTransferState('selecting');
-        // Reset input
         e.target.value = '';
     };
 
@@ -91,14 +92,11 @@ const P2PShare = () => {
 
     const removeFile = (index: number) => {
         setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-        if (selectedFiles.length <= 1) {
-            setTransferState('idle');
-        }
+        if (selectedFiles.length <= 1) setTransferState('idle');
     };
 
     const startSharing = async () => {
         if (selectedFiles.length === 0) return;
-
         setTransferState('sharing');
         const code = await createSession();
         if (!code) {
@@ -112,21 +110,28 @@ const P2PShare = () => {
         if (connection && mode === 'send' && transferState === 'sharing' && selectedFiles.length > 0) {
             handleSend();
         }
-    }, [connection, mode, transferState]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [connection]);
 
     const handleSend = async () => {
         if (!connection || selectedFiles.length === 0) return;
 
+        const ac = new AbortController();
+        transferAbortRef.current = ac;
         setTransferState('transferring');
+
         try {
-            await sendBatch(selectedFiles, connection, (p) => setProgress(p));
+            await sendBatch(selectedFiles, connection, (p) => setProgress(p), ac.signal);
             setTransferState('success');
             toast.success('All files sent successfully!');
         } catch (err: any) {
+            if (err?.name === 'AbortError') return; // user cancelled, no toast
             console.error('Send failed:', err);
             setTransferState('error');
             setErrorMessage(err.message || 'Transfer failed');
             toast.error(err.message || 'Transfer failed');
+        } finally {
+            transferAbortRef.current = null;
         }
     };
 
@@ -139,7 +144,6 @@ const P2PShare = () => {
             toast.error('Please enter a valid share code');
             return;
         }
-
         const success = await joinSession(receiveCode);
         if (!success) {
             toast.error(sessionError || 'Failed to join session');
@@ -149,19 +153,26 @@ const P2PShare = () => {
     const handleAccept = async () => {
         if (!pendingTransfer) return;
 
-        acceptBatchTransfer(pendingTransfer);
+        const ac = new AbortController();
+        transferAbortRef.current = ac;
         setTransferState('transferring');
+        setPendingTransfer(null); // clear the accept/decline UI immediately
 
         try {
-            const results = await receiveBatch(pendingTransfer, (p) => setProgress(p));
+            // acceptAndReceive wires the data listener BEFORE sending 'accept',
+            // eliminating the race where chunks arrive before receiveBatch is listening.
+            const results = await acceptAndReceive(pendingTransfer, (p) => setProgress(p), ac.signal);
             setTransferState('success');
             toast.success(`Received ${results.length} file(s)!`);
             downloadAllFiles(results);
         } catch (err: any) {
+            if (err?.name === 'AbortError') return;
             console.error('Receive failed:', err);
             setTransferState('error');
             setErrorMessage(err.message || 'Transfer failed');
             toast.error(err.message || 'Receive failed');
+        } finally {
+            transferAbortRef.current = null;
         }
     };
 
@@ -171,6 +182,13 @@ const P2PShare = () => {
             setPendingTransfer(null);
             toast.info('Transfer declined');
         }
+    };
+
+    const handleCancel = () => {
+        transferAbortRef.current?.abort();
+        transferAbortRef.current = null;
+        setTransferState('idle');
+        setProgress(null);
     };
 
     // ========================================================================
@@ -190,6 +208,8 @@ const P2PShare = () => {
     };
 
     const reset = () => {
+        transferAbortRef.current?.abort();
+        transferAbortRef.current = null;
         disconnect();
         setMode('choose');
         setTransferState('idle');
@@ -244,9 +264,7 @@ const P2PShare = () => {
                         >
                             <Upload className="h-10 w-10 mx-auto mb-3 text-primary" />
                             <h3 className="font-semibold text-lg">Send</h3>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Share files & folders
-                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">Share files & folders</p>
                         </Card>
 
                         <Card
@@ -255,9 +273,7 @@ const P2PShare = () => {
                         >
                             <Download className="h-10 w-10 mx-auto mb-3 text-primary" />
                             <h3 className="font-semibold text-lg">Receive</h3>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Enter a share code
-                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">Enter a share code</p>
                         </Card>
                     </div>
                 )}
@@ -270,14 +286,7 @@ const P2PShare = () => {
                         {/* File selection */}
                         {(transferState === 'idle' || transferState === 'selecting') && (
                             <>
-                                {/* Hidden File Inputs */}
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    multiple
-                                    onChange={handleFileSelect}
-                                    className="hidden"
-                                />
+                                <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
                                 <input
                                     ref={folderInputRef}
                                     type="file"
@@ -286,35 +295,21 @@ const P2PShare = () => {
                                     {...{ webkitdirectory: '', directory: '' } as any}
                                 />
 
-                                {/* Drop zone / buttons */}
                                 <Card className="p-6 border-dashed border-2 text-center">
                                     <div className="space-y-3">
                                         <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                                        <p className="text-sm text-muted-foreground">
-                                            Select files or folders to share
-                                        </p>
+                                        <p className="text-sm text-muted-foreground">Select files or folders to share</p>
                                         <div className="flex gap-2 justify-center">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => fileInputRef.current?.click()}
-                                            >
-                                                <FileIcon className="h-4 w-4 mr-1" />
-                                                Files
+                                            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                                                <FileIcon className="h-4 w-4 mr-1" />Files
                                             </Button>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => folderInputRef.current?.click()}
-                                            >
-                                                <FolderUp className="h-4 w-4 mr-1" />
-                                                Folder
+                                            <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
+                                                <FolderUp className="h-4 w-4 mr-1" />Folder
                                             </Button>
                                         </div>
                                     </div>
                                 </Card>
 
-                                {/* Selected files list */}
                                 {selectedFiles.length > 0 && (
                                     <Card className="divide-y">
                                         {selectedFiles.map((entry, idx) => (
@@ -341,33 +336,25 @@ const P2PShare = () => {
                             </>
                         )}
 
-                        {/* Waiting for receiver — Share Code Display */}
+                        {/* Waiting for receiver */}
                         {transferState === 'sharing' && shareCode && !connection && (
                             <Card className="p-6 text-center space-y-4">
                                 <p className="text-sm text-muted-foreground">Share this code with the receiver</p>
-
-                                {/* Code display */}
                                 <div className="flex justify-center gap-1.5">
                                     {shareCode.split('').map((char, i) => (
-                                        <div
-                                            key={i}
-                                            className="w-11 h-14 bg-muted rounded-lg flex items-center justify-center text-2xl font-bold font-mono"
-                                        >
+                                        <div key={i} className="w-11 h-14 bg-muted rounded-lg flex items-center justify-center text-2xl font-bold font-mono">
                                             {char}
                                         </div>
                                     ))}
                                 </div>
-
                                 <Button variant="outline" size="sm" onClick={copyCode} className="gap-1.5">
                                     {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                     {copied ? 'Copied!' : 'Copy Code'}
                                 </Button>
-
                                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     <span>Waiting for receiver to connect...</span>
                                 </div>
-
                                 <p className="text-xs text-muted-foreground">
                                     {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} • {formatBytes(totalSize)}
                                 </p>
@@ -375,22 +362,29 @@ const P2PShare = () => {
                         )}
 
                         {/* Transferring */}
-                        {transferState === 'transferring' && progress && (
+                        {transferState === 'transferring' && (
                             <Card className="p-6 space-y-4">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="font-medium text-sm">Sending files...</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {progress.currentFileName} ({progress.completedFiles + 1}/{progress.totalFiles})
-                                        </p>
+                                        {progress && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {progress.currentFileName} ({progress.completedFiles + 1}/{progress.totalFiles})
+                                            </p>
+                                        )}
                                     </div>
-                                    <span className="text-sm font-mono">{progress.overallProgress}%</span>
+                                    <span className="text-sm font-mono">{progress?.overallProgress ?? 0}%</span>
                                 </div>
-                                <Progress value={progress.overallProgress} className="w-full" />
-                                <div className="flex justify-between text-xs text-muted-foreground">
-                                    <span>{formatBytes(progress.bytesTransferred)} / {formatBytes(progress.totalBytes)}</span>
-                                    <span>{formatBytes(progress.speed)}/s</span>
-                                </div>
+                                <Progress value={progress?.overallProgress ?? 0} className="w-full" />
+                                {progress && (
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                        <span>{formatBytes(progress.bytesTransferred)} / {formatBytes(progress.totalBytes)}</span>
+                                        <span>{formatBytes(progress.speed)}/s</span>
+                                    </div>
+                                )}
+                                <Button variant="outline" size="sm" onClick={handleCancel} className="w-full">
+                                    Cancel
+                                </Button>
                             </Card>
                         )}
 
@@ -431,7 +425,6 @@ const P2PShare = () => {
                         {status !== 'connected' && transferState !== 'transferring' && transferState !== 'success' && transferState !== 'error' && (
                             <Card className="p-6 text-center space-y-4">
                                 <p className="text-sm text-muted-foreground">Enter the share code from the sender</p>
-
                                 <div className="flex justify-center gap-1.5">
                                     <input
                                         type="text"
@@ -444,7 +437,6 @@ const P2PShare = () => {
                                         onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
                                     />
                                 </div>
-
                                 <Button
                                     onClick={handleJoin}
                                     disabled={receiveCode.length < 4 || status === 'joining' || status === 'connecting'}
@@ -455,10 +447,7 @@ const P2PShare = () => {
                                     )}
                                     {status === 'joining' ? 'Joining...' : status === 'connecting' ? 'Connecting...' : 'Connect'}
                                 </Button>
-
-                                {sessionError && (
-                                    <p className="text-sm text-destructive">{sessionError}</p>
-                                )}
+                                {sessionError && <p className="text-sm text-destructive">{sessionError}</p>}
                             </Card>
                         )}
 
@@ -466,7 +455,6 @@ const P2PShare = () => {
                         {pendingTransfer && transferState !== 'transferring' && transferState !== 'success' && (
                             <Card className="p-6 space-y-4">
                                 <h3 className="font-semibold text-center">Incoming Transfer</h3>
-
                                 <div className="bg-muted rounded-lg p-3 space-y-1.5">
                                     {pendingTransfer.metadata.files.map((f, i) => (
                                         <div key={i} className="flex items-center justify-between text-sm">
@@ -475,11 +463,9 @@ const P2PShare = () => {
                                         </div>
                                     ))}
                                 </div>
-
                                 <p className="text-center text-sm text-muted-foreground">
                                     {pendingTransfer.metadata.totalFiles} file{pendingTransfer.metadata.totalFiles > 1 ? 's' : ''} • {formatBytes(pendingTransfer.metadata.totalSize)}
                                 </p>
-
                                 <div className="flex gap-2 justify-center">
                                     <Button variant="outline" onClick={handleDecline}>Decline</Button>
                                     <Button onClick={handleAccept}>Accept & Download</Button>
@@ -496,22 +482,29 @@ const P2PShare = () => {
                         )}
 
                         {/* Receiving progress */}
-                        {transferState === 'transferring' && progress && (
+                        {transferState === 'transferring' && (
                             <Card className="p-6 space-y-4">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="font-medium text-sm">Receiving files...</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {progress.currentFileName} ({progress.completedFiles + 1}/{progress.totalFiles})
-                                        </p>
+                                        {progress && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {progress.currentFileName} ({progress.completedFiles + 1}/{progress.totalFiles})
+                                            </p>
+                                        )}
                                     </div>
-                                    <span className="text-sm font-mono">{progress.overallProgress}%</span>
+                                    <span className="text-sm font-mono">{progress?.overallProgress ?? 0}%</span>
                                 </div>
-                                <Progress value={progress.overallProgress} className="w-full" />
-                                <div className="flex justify-between text-xs text-muted-foreground">
-                                    <span>{formatBytes(progress.bytesTransferred)} / {formatBytes(progress.totalBytes)}</span>
-                                    <span>{formatBytes(progress.speed)}/s</span>
-                                </div>
+                                <Progress value={progress?.overallProgress ?? 0} className="w-full" />
+                                {progress && (
+                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                        <span>{formatBytes(progress.bytesTransferred)} / {formatBytes(progress.totalBytes)}</span>
+                                        <span>{formatBytes(progress.speed)}/s</span>
+                                    </div>
+                                )}
+                                <Button variant="outline" size="sm" onClick={handleCancel} className="w-full">
+                                    Cancel
+                                </Button>
                             </Card>
                         )}
 
