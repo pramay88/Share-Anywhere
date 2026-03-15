@@ -9,6 +9,7 @@ import { initializeFirebaseAdmin } from './config/firebase.js';
 import corsMiddleware from './middleware/cors.js';
 import sharesRouter from './routes/shares.js';
 import userRouter from './routes/user.js';
+import p2pRouter from './routes/p2p.js';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -43,6 +44,9 @@ app.use('/api/shares', sharesRouter);
 
 // User routes (history and stats)
 app.use('/api/user', userRouter);
+
+// P2P signaling routes
+app.use('/api/p2p', p2pRouter);
 
 // 404 handler
 app.use((req, res) => {

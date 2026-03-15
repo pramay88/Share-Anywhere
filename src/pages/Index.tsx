@@ -44,10 +44,10 @@ const Index = () => {
             <Button
               size="lg"
               variant="outline"
-              onClick={() => navigate("/quickshare")}
+              onClick={() => navigate("/p2p")}
             >
               <Zap className="mr-2 h-4 w-4" />
-              Quick Share Text
+              P2P
             </Button>
             <Button
               size="lg"

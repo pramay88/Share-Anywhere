@@ -12,6 +12,7 @@ import Send from "./pages/Send";
 import Receive from "./pages/ReceiveNew";
 import QuickShare from "./pages/QuickShare";
 import OfflineShare from "./pages/OfflineShareNew";
+import P2PShare from "./pages/P2PShare";
 import Auth from "./pages/Auth";
 import History from "./pages/History";
 import NotFound from "./pages/NotFound";
@@ -50,6 +51,7 @@ const AppContent = () => {
         <Route path="/quickshare" element={<QuickShare />} />
         <Route path="/receive" element={<Receive />} />
         <Route path="/offline-share" element={<OfflineShare />} />
+        <Route path="/p2p" element={<P2PShare />} />
         <Route path="/history" element={<History />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
