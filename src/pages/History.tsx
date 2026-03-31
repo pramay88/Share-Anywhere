@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/ui/card';
@@ -31,6 +31,15 @@ import {
     TrendingUp,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+
+// Simple cache for reducer debouncing
+const debounce = (fn: Function, delay: number) => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    return (...args: any[]) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn(...args), delay);
+    };
+};
 
 interface HistoryRecord {
     id: string;
@@ -77,20 +86,43 @@ const INITIAL_STATS: UserStats = {
 };
 
 const HISTORY_PAGE_SIZE = 20;
+const CACHE_KEY_PREFIX = 'history_cache_';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Helper to get/set cache
+const getCache = (userId: string) => {
+    try {
+        const cached = localStorage.getItem(CACHE_KEY_PREFIX + userId);
+        if (!cached) return null;
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp > CACHE_DURATION) {
+            localStorage.removeItem(CACHE_KEY_PREFIX + userId);
+            return null;
+        }
+        return data;
+    } catch {
+        return null;
+    }
+};
+
+const setCache = (userId: string, data: any) => {
+    try {
+        localStorage.setItem(CACHE_KEY_PREFIX + userId, JSON.stringify({
+            data,
+            timestamp: Date.now(),
+        }));
+    } catch {
+        // Cache failure is non-fatal
+    }
+};
 
 const History = () => {
     const navigate = useNavigate();
     const { user, loading: authLoading } = useAuth();
+    const filterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
     const [history, setHistory] = useState<HistoryRecord[]>([]);
-    const [activeHistory, setActiveHistory] = useState<HistoryRecord[]>([]);
-    const [historyPagination, setHistoryPagination] = useState<HistoryPagination>({
-        limit: HISTORY_PAGE_SIZE,
-        hasMore: false,
-        nextCursor: null,
-    });
-
     const [loadingInitial, setLoadingInitial] = useState(true);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -120,10 +152,8 @@ const History = () => {
 
     const formatDuration = useCallback((durationMs: number) => {
         if (!durationMs || durationMs <= 0) return '-';
-
         const seconds = Math.floor(durationMs / 1000);
         if (seconds < 60) return `${seconds}s`;
-
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
         return `${minutes}m ${remainingSeconds}s`;
@@ -140,66 +170,26 @@ const History = () => {
         return 'border-emerald-500';
     }, []);
 
-    const loadStats = useCallback(async () => {
+    // Combined loading - single API call instead of 3
+    const loadInitialData = useCallback(async () => {
         if (!user) return;
 
-        const statsRes = await apiClient.getUserStats(user.uid);
-
-        if (!statsRes.success) {
-            throw new Error((statsRes as any)?.error?.message || 'Failed to load stats');
-        }
-
-        setStats((statsRes as any).stats || INITIAL_STATS);
-    }, [user]);
-
-    const loadActiveShares = useCallback(async () => {
-        if (!user) return;
-
-        const activeRes = await apiClient.getActiveShares(user.uid);
-
-        if (!activeRes.success) {
-            throw new Error((activeRes as any)?.error?.message || 'Failed to load active shares');
-        }
-
-        const activeRows = (((activeRes as any).activeShares || []) as any[])
-            .map((row) => ({
-                id: `active-${row.id || row.transferId || row.shareCode || Math.random().toString(36).slice(2)}`,
-                transferId: row.transferId || null,
-                shareCode: row.shareCode || null,
-                transferType: row.transferType || 'internet',
-                direction: row.direction || 'send',
-                status: (row.status || 'active') as HistoryRecord['status'],
-                fileName: row.fileName || null,
-                fileType: row.fileType || null,
-                fileSize: row.fileSize || 0,
-                totalBytes: row.totalBytes || 0,
-                downloadsCount: row.downloads_count || 0,
-                durationMs: 0,
-                speedBytesPerSec: 0,
-                error: null,
-                timestamp: row.timestamp || new Date().toISOString(),
-            }))
-            .filter((row) => row.status === 'active' || row.status === 'pending')
-            .map((row) => ({ ...row, status: 'active' as const }));
-
-        setActiveHistory(activeRows);
-        setStats((prev) => ({ ...prev, activeShares: activeRows.length }));
-    }, [user]);
-
-    const loadHistoryPage = useCallback(async (reset = false) => {
-        if (!user) return;
-
-        if (!reset && !historyPagination.hasMore && history.length > 0) {
+        // Try cache first
+        const cached = getCache(user.uid);
+        if (cached) {
+            setHistory(cached.history || []);
+            setStats(cached.stats || INITIAL_STATS);
+            setLoadingInitial(false);
             return;
         }
 
-        setLoadingHistory(true);
+        setLoadingInitial(true);
+        setErrorMessage(null);
 
         try {
-            const cursor = !reset ? historyPagination.nextCursor : null;
+            // Single history call gets everything (active + history)
             const response = await apiClient.getUserHistory(user.uid, {
-                limit: HISTORY_PAGE_SIZE,
-                cursor: cursor || undefined,
+                limit: 1000, // Fetch more at once for better caching
             });
 
             if (!response.success) {
@@ -207,40 +197,33 @@ const History = () => {
             }
 
             const records = ((response as any).records || []) as HistoryRecord[];
-            const pagination = ((response as any).pagination || {
-                limit: HISTORY_PAGE_SIZE,
-                hasMore: false,
-                nextCursor: null,
-            }) as HistoryPagination;
 
-            setHistory((prev) => (reset ? records : [...prev, ...records]));
-            setHistoryPagination(pagination);
+            // Compute stats from loaded records instead of separate call
+            const computedStats: UserStats = {
+                totalSends: records.filter(r => r.direction === 'send' && r.status !== 'active' && r.status !== 'pending').length,
+                totalReceives: records.filter(r => r.direction === 'receive' && r.status !== 'active' && r.status !== 'pending').length,
+                totalDataShared: records.reduce((sum, r) => sum + (r.totalBytes || r.fileSize || 0), 0),
+                activeShares: records.filter(r => r.status === 'active' || r.status === 'pending').length,
+                totalFailures: records.filter(r => r.status === 'failed').length,
+                totalRetries: 0,
+                averageSpeedBytesPerSec: records.length > 0
+                    ? Math.round(records.reduce((sum, r) => sum + (r.speedBytesPerSec || 0), 0) / records.length)
+                    : 0,
+            };
+
+            setHistory(records);
+            setStats(computedStats);
+
+            // Cache for 5 minutes
+            setCache(user.uid, { history: records, stats: computedStats });
         } catch (error: any) {
             setErrorMessage(error.message || 'Failed to load history');
             toast.error(error.message || 'Failed to load history');
         } finally {
-            setLoadingHistory(false);
-        }
-    }, [history.length, historyPagination.hasMore, historyPagination.nextCursor, user]);
-
-    const loadInitialData = useCallback(async () => {
-        if (!user) return;
-
-        setLoadingInitial(true);
-        setErrorMessage(null);
-
-        try {
-            await loadStats();
-            await loadActiveShares();
-            await loadHistoryPage(true);
-        } catch (error: any) {
-            setErrorMessage(error.message || 'Failed to load transfer history');
-            toast.error(error.message || 'Failed to load transfer history');
-        } finally {
             setLoadingInitial(false);
             setRefreshing(false);
         }
-    }, [loadActiveShares, loadHistoryPage, loadStats, user]);
+    }, [user]);
 
     useEffect(() => {
         if (!authLoading) {
@@ -251,31 +234,43 @@ const History = () => {
             }
             loadInitialData();
         }
-    }, [authLoading, loadInitialData, navigate, user]);
+    }, [authLoading, user, navigate, loadInitialData]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
         setHistory([]);
-        setActiveHistory([]);
-        setHistoryPagination({
-            limit: HISTORY_PAGE_SIZE,
-            hasMore: false,
-            nextCursor: null,
-        });
         await loadInitialData();
     };
 
-    const mergedHistory = useMemo(() => {
-        const merged = [...activeHistory, ...history];
-        return merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }, [activeHistory, history]);
+    // Memoized filter with debounce for input changes
+    const handleFilterChange = useCallback((key: string, value: string) => {
+        if (filterTimeoutRef.current) clearTimeout(filterTimeoutRef.current);
+        
+        switch (key) {
+            case 'direction':
+                setDirectionFilter(value as 'all' | 'send' | 'receive');
+                break;
+            case 'status':
+                setStatusFilter(value as 'all' | 'active' | 'failed' | 'success' | 'cancelled');
+                break;
+            case 'time':
+                setTimeFilter(value as 'all' | '24h' | '7d' | '30d');
+                break;
+            case 'minSpeed':
+                filterTimeoutRef.current = setTimeout(() => setMinSpeedKBps(value), 300);
+                break;
+            case 'minData':
+                filterTimeoutRef.current = setTimeout(() => setMinDataMB(value), 300);
+                break;
+        }
+    }, []);
 
     const filteredHistory = useMemo(() => {
         const now = Date.now();
         const minSpeed = Number(minSpeedKBps || 0) * 1024;
         const minBytes = Number(minDataMB || 0) * 1024 * 1024;
 
-        return mergedHistory.filter((item) => {
+        return history.filter((item) => {
             if (directionFilter !== 'all' && item.direction !== directionFilter) return false;
             if (statusFilter !== 'all' && item.status !== statusFilter) return false;
 
@@ -291,7 +286,7 @@ const History = () => {
 
             return true;
         });
-    }, [directionFilter, history, mergedHistory, minDataMB, minSpeedKBps, statusFilter, timeFilter]);
+    }, [directionFilter, history, minDataMB, minSpeedKBps, statusFilter, timeFilter]);
 
     const historyHasData = filteredHistory.length > 0;
 
@@ -415,7 +410,7 @@ const History = () => {
                             <select
                                 className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
                                 value={directionFilter}
-                                onChange={(e) => setDirectionFilter(e.target.value as 'all' | 'send' | 'receive')}
+                                onChange={(e) => handleFilterChange('direction', e.target.value)}
                             >
                                 <option value='all'>All activity</option>
                                 <option value='send'>Sent</option>
@@ -425,7 +420,7 @@ const History = () => {
                             <select
                                 className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
                                 value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'failed' | 'success' | 'cancelled')}
+                                onChange={(e) => handleFilterChange('status', e.target.value)}
                             >
                                 <option value='all'>All statuses</option>
                                 <option value='success'>Success</option>
@@ -437,7 +432,7 @@ const History = () => {
                             <select
                                 className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
                                 value={timeFilter}
-                                onChange={(e) => setTimeFilter(e.target.value as 'all' | '24h' | '7d' | '30d')}
+                                onChange={(e) => handleFilterChange('time', e.target.value)}
                             >
                                 <option value='all'>All time</option>
                                 <option value='24h'>Last 24 hours</option>
@@ -451,7 +446,7 @@ const History = () => {
                                 className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm'
                                 placeholder='Min speed (KB/s)'
                                 value={minSpeedKBps}
-                                onChange={(e) => setMinSpeedKBps(e.target.value)}
+                                onChange={(e) => handleFilterChange('minSpeed', e.target.value)}
                             />
 
                             <input
@@ -460,7 +455,7 @@ const History = () => {
                                 className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm'
                                 placeholder='Min data (MB)'
                                 value={minDataMB}
-                                onChange={(e) => setMinDataMB(e.target.value)}
+                                onChange={(e) => handleFilterChange('minData', e.target.value)}
                             />
 
                             <Button
@@ -539,17 +534,15 @@ const History = () => {
                                 </div>
 
                                 <div className='p-4 border-t flex items-center justify-center'>
-                                    {loadingHistory ? (
+                                    {loadingInitial ? (
                                         <div className='flex items-center gap-2 text-sm text-muted-foreground'>
                                             <Loader2 className='h-4 w-4 animate-spin' />
                                             Loading history...
                                         </div>
-                                    ) : historyPagination.hasMore ? (
-                                        <Button variant='outline' onClick={() => loadHistoryPage(false)}>
-                                            Load More
-                                        </Button>
                                     ) : (
-                                        <p className='text-sm text-muted-foreground'>You have reached the end of history.</p>
+                                        <p className='text-sm text-muted-foreground'>
+                                            Showing {filteredHistory.length} of {history.length} transfers
+                                        </p>
                                     )}
                                 </div>
                             </>
