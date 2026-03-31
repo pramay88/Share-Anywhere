@@ -7,9 +7,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Download, Copy, Check, Wifi, FolderUp, FileIcon, X, Loader2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { Header } from '@/components/Header';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,6 +50,7 @@ const P2PShare = () => {
     const cleanupListenerRef = useRef<(() => void) | null>(null);
     // AbortController so the user can cancel an in-progress transfer
     const transferAbortRef = useRef<AbortController | null>(null);
+    const queryJoinAttemptedRef = useRef(false);
 
     const {
         role,
@@ -197,15 +200,39 @@ const P2PShare = () => {
     // ========================================================================
 
     const handleJoin = async () => {
-        if (receiveCode.trim().length < 4) {
-            toast.error('Please enter a valid share code');
+        const normalizedCode = receiveCode.trim().toUpperCase();
+        if (normalizedCode.length !== 6) {
+            toast.error('Please enter a 6-character share code');
             return;
         }
-        const success = await joinSession(receiveCode);
+        const success = await joinSession(normalizedCode);
         if (!success) {
             toast.error(sessionError || 'Failed to join session');
         }
     };
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const codeFromQuery = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (codeFromQuery.length === 6) {
+            setMode('receive');
+            setReceiveCode(codeFromQuery);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (mode !== 'receive') return;
+        if (status !== 'idle') return;
+        if (receiveCode.length !== 6) return;
+        if (queryJoinAttemptedRef.current) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const codeFromQuery = (params.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (codeFromQuery !== receiveCode) return;
+
+        queryJoinAttemptedRef.current = true;
+        void handleJoin();
+    }, [mode, receiveCode, status]);
 
     const handleAccept = async () => {
         if (!pendingTransfer) return;
@@ -317,6 +344,7 @@ const P2PShare = () => {
     };
 
     const totalSize = selectedFiles.reduce((sum, f) => sum + f.file.size, 0);
+    const p2pJoinUrl = shareCode ? `${window.location.origin}/p2p?code=${encodeURIComponent(shareCode)}` : '';
 
     // ========================================================================
     // RENDER
@@ -443,6 +471,14 @@ const P2PShare = () => {
                                     {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                     {copied ? 'Copied!' : 'Copy Code'}
                                 </Button>
+                                {p2pJoinUrl && (
+                                    <div className="pt-2">
+                                        <p className="text-xs text-muted-foreground mb-2">Or scan QR to join instantly</p>
+                                        <div className="inline-flex bg-white p-2 rounded-lg border shadow-sm">
+                                            <QRCodeSVG value={p2pJoinUrl} size={132} level="M" />
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     <span>Waiting for receiver to connect...</span>
@@ -517,21 +553,34 @@ const P2PShare = () => {
                         {status !== 'connected' && transferState !== 'transferring' && transferState !== 'success' && transferState !== 'error' && (
                             <Card className="p-6 text-center space-y-4">
                                 <p className="text-sm text-muted-foreground">Enter the share code from the sender</p>
-                                <div className="flex justify-center gap-1.5">
-                                    <input
-                                        type="text"
+                                <div className="flex justify-center">
+                                    <InputOTP
                                         maxLength={6}
                                         value={receiveCode}
-                                        onChange={(e) => setReceiveCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                                        placeholder="ABC123"
-                                        className="w-full max-w-[240px] text-center text-2xl font-mono font-bold tracking-[0.4em] py-3 px-4 bg-muted rounded-lg border-0 outline-none focus:ring-2 focus:ring-primary"
                                         autoFocus
-                                        onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-                                    />
+                                        onChange={(value) => {
+                                            const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+                                            setReceiveCode(normalized);
+                                        }}
+                                        onComplete={() => {
+                                            if (status !== 'joining' && status !== 'connecting') {
+                                                void handleJoin();
+                                            }
+                                        }}
+                                    >
+                                        <InputOTPGroup>
+                                            <InputOTPSlot index={0} className="h-12 w-10 text-lg font-mono" />
+                                            <InputOTPSlot index={1} className="h-12 w-10 text-lg font-mono" />
+                                            <InputOTPSlot index={2} className="h-12 w-10 text-lg font-mono" />
+                                            <InputOTPSlot index={3} className="h-12 w-10 text-lg font-mono" />
+                                            <InputOTPSlot index={4} className="h-12 w-10 text-lg font-mono" />
+                                            <InputOTPSlot index={5} className="h-12 w-10 text-lg font-mono" />
+                                        </InputOTPGroup>
+                                    </InputOTP>
                                 </div>
                                 <Button
                                     onClick={handleJoin}
-                                    disabled={receiveCode.length < 4 || status === 'joining' || status === 'connecting'}
+                                    disabled={receiveCode.length < 6 || status === 'joining' || status === 'connecting'}
                                     className="gap-1.5"
                                 >
                                     {(status === 'joining' || status === 'connecting') && (

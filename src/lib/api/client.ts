@@ -1,4 +1,4 @@
-import { API_ENDPOINTS } from '@/lib/shared/constants';
+import { API_BASE_URL, API_ENDPOINTS } from '@/lib/shared/constants';
 import type {
     ApiResponse,
     CreateShareRequest,
@@ -19,6 +19,7 @@ interface RequestOptions {
     body?: any;
     headers?: Record<string, string>;
     authToken?: string;
+    silent?: boolean;
 }
 
 class ApiClient {
@@ -89,7 +90,9 @@ class ApiClient {
                 try {
                     data = await response.json();
                 } catch (parseError) {
-                    console.error('Failed to parse JSON response:', parseError);
+                    if (!options.silent) {
+                        console.error('Failed to parse JSON response:', parseError);
+                    }
                     return {
                         success: false,
                         error: {
@@ -101,7 +104,9 @@ class ApiClient {
             } else {
                 // Not JSON - likely HTML error page
                 const text = await response.text();
-                console.error('Non-JSON response received:', text.substring(0, 200));
+                if (!options.silent) {
+                    console.error('Non-JSON response received:', text.substring(0, 200));
+                }
                 return {
                     success: false,
                     error: {
@@ -123,7 +128,9 @@ class ApiClient {
 
             return data;
         } catch (error: any) {
-            console.error('API request failed:', error);
+            if (!options.silent) {
+                console.error('API request failed:', error);
+            }
             return {
                 success: false,
                 error: {
@@ -278,6 +285,7 @@ class ApiClient {
         return this.request(API_ENDPOINTS.USER.TRACK_EVENT(userId), {
             method: 'POST',
             body: event,
+            silent: true,
         });
     }
 
@@ -288,6 +296,7 @@ class ApiClient {
         return this.request(API_ENDPOINTS.USER.TRACK_EVENT_ANON, {
             method: 'POST',
             body: event,
+            silent: true,
         });
     }
 
@@ -311,7 +320,7 @@ class ApiClient {
 }
 
 // Export singleton instance with backend URL
-export const apiClient = new ApiClient(import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
+export const apiClient = new ApiClient(API_BASE_URL);
 
 // Export class for testing
 export { ApiClient };
