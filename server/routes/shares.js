@@ -8,6 +8,7 @@ import { getFirestore } from '../config/firebase.js';
 import { generateUploadSignature, getFileUrl } from '../services/uploadService.js';
 import { validateApiKey, createRateLimiter, publicRateLimiter } from '../middleware/auth.js';
 import { cleanupExpiredShares, permanentlyDeleteOldShares } from '../services/cleanupService.js';
+import { enqueueAnalyticsEvent } from '../services/analyticsQueue.js';
 
 const router = express.Router();
 
@@ -58,7 +59,8 @@ async function generateUniqueShareCode() {
  */
 router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
     try {
-        const { contentType, content, fileName, fileSize, mimeType, ownerId, visibility } = req.body;
+        const { contentType, content, fileName, fileSize, mimeType, ownerId, visibility, is_ephemeral } = req.body;
+        const isEphemeral = is_ephemeral === true || is_ephemeral === 'true';
 
         // Validate content type
         if (!['text', 'url', 'file'].includes(contentType)) {
@@ -77,6 +79,7 @@ router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
 
         const db = getFirestore();
         const shareData = {
+            version: 2,
             shareCode,
             contentType,
             createdAt,
@@ -86,6 +89,7 @@ router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
             ownerId: ownerId || null,  // Optional: null for anonymous users
             visibility: visibility || 'private',  // Default to private
             downloadCount: 0,  // Track number of downloads
+            is_ephemeral: isEphemeral,
         };
 
         // Handle different content types
@@ -118,6 +122,22 @@ router.post('/create', validateApiKey, createRateLimiter, async (req, res) => {
 
         // Save to Firestore
         await db.collection('shares').doc(shareCode).set(shareData);
+
+        enqueueAnalyticsEvent({
+            userId: ownerId || null,
+            shareCode,
+            transferType: 'internet',
+            direction: 'send',
+            status: shareData.status === 'ready' ? 'active' : 'pending',
+            fileName: fileName || (contentType === 'text' ? 'Text snippet' : null),
+            fileType: mimeType || (contentType === 'text' ? 'text/plain' : null),
+            fileSize: fileSize || 0,
+            totalBytes: fileSize || (typeof content === 'string' ? Buffer.byteLength(content, 'utf8') : 0),
+            retries: 0,
+            is_ephemeral: shareData.is_ephemeral,
+            metadata: { source: 'shares-create' },
+            clientTimestamp: createdAt.toISOString(),
+        });
 
         const shareUrl = `${process.env.APP_URL || 'http://localhost:8080'}/receive?code=${shareCode}`;
 
@@ -191,6 +211,22 @@ router.post('/:code/complete', validateApiKey, createRateLimiter, async (req, re
             cloudinaryUrl: cloudinaryUrl || getFileUrl(cloudinaryPublicId),
             status: 'ready',
             uploadedAt: new Date(),
+        });
+
+        enqueueAnalyticsEvent({
+            userId: shareData.ownerId || null,
+            shareCode: code,
+            transferType: 'internet',
+            direction: 'send',
+            status: 'active',
+            fileName: shareData.fileName || null,
+            fileType: shareData.mimeType || null,
+            fileSize: shareData.fileSize || 0,
+            totalBytes: shareData.fileSize || 0,
+            retries: 0,
+            is_ephemeral: shareData.is_ephemeral === true,
+            metadata: { source: 'shares-complete' },
+            clientTimestamp: new Date().toISOString(),
         });
 
         res.json({
@@ -345,6 +381,17 @@ router.get('/:code/download', publicRateLimiter, async (req, res) => {
             downloadCount: (shareData.downloadCount || 0) + 1,
         });
 
+        const nextDownloadCount = (shareData.downloadCount || 0) + 1;
+
+        // Single-use behavior for ephemeral shares.
+        if (shareData.is_ephemeral === true) {
+            await doc.ref.update({
+                consumed: true,
+                consumedAt: new Date(),
+                status: 'deleted',
+            });
+        }
+
         // If share has an owner, increment their receive stats
         if (shareData.ownerId) {
             try {
@@ -371,6 +418,26 @@ router.get('/:code/download', publicRateLimiter, async (req, res) => {
         }
 
         // Redirect to Cloudinary CDN
+        enqueueAnalyticsEvent({
+            userId: shareData.ownerId || null,
+            shareCode: code,
+            transferType: 'internet',
+            direction: 'receive',
+            status: 'success',
+            fileName: shareData.fileName || null,
+            fileType: shareData.mimeType || null,
+            fileSize: shareData.fileSize || 0,
+            totalBytes: shareData.fileSize || 0,
+            retries: 0,
+            downloadsIncrement: 1,
+            is_ephemeral: shareData.is_ephemeral === true,
+            metadata: {
+                source: 'shares-download',
+                downloads_count: nextDownloadCount,
+            },
+            clientTimestamp: new Date().toISOString(),
+        });
+
         res.redirect(302, cloudinaryUrl);
     } catch (error) {
         console.error('Error downloading file:', error);
@@ -394,6 +461,17 @@ router.post('/:code/consume', publicRateLimiter, async (req, res) => {
         await db.collection('shares').doc(code).update({
             consumed: true,
             consumedAt: new Date(),
+        });
+
+        enqueueAnalyticsEvent({
+            shareCode: code,
+            transferType: 'internet',
+            direction: 'receive',
+            status: 'success',
+            retries: 0,
+            downloadsIncrement: 1,
+            metadata: { source: 'shares-consume' },
+            clientTimestamp: new Date().toISOString(),
         });
 
         res.json({

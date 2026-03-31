@@ -29,6 +29,24 @@ class ApiClient {
     }
 
     /**
+     * Build a request URL while avoiding duplicated "/api" prefixes.
+     */
+    private buildRequestUrl(url: string): string {
+        const normalizedBase = (this.baseUrl || '').replace(/\/+$/, '');
+        const normalizedPath = url.startsWith('/') ? url : `/${url}`;
+
+        if (!normalizedBase) {
+            return normalizedPath;
+        }
+
+        if (normalizedBase.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+            return `${normalizedBase}${normalizedPath.slice(4)}`;
+        }
+
+        return `${normalizedBase}${normalizedPath}`;
+    }
+
+    /**
      * Make HTTP request with error handling and retries
      */
     private async request<T>(
@@ -60,7 +78,7 @@ class ApiClient {
         };
 
         try {
-            const response = await fetch(`${this.baseUrl}${url}`, fetchOptions);
+            const response = await fetch(this.buildRequestUrl(url), fetchOptions);
 
             // Check if response is JSON
             const contentType = response.headers.get('content-type');
@@ -206,8 +224,22 @@ class ApiClient {
     /**
      * Get user's share history (last 24 hours)
      */
-    async getUserHistory(userId: string): Promise<ApiResponse<any>> {
-        return this.request(`/api/user/${userId}/history`, {
+    async getUserHistory(userId: string, params?: Record<string, string | number | undefined>): Promise<ApiResponse<any>> {
+        const searchParams = new URLSearchParams();
+        if (params) {
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    searchParams.set(key, String(value));
+                }
+            });
+        }
+
+        const query = searchParams.toString();
+        const url = query
+            ? `${API_ENDPOINTS.USER.HISTORY(userId)}?${query}`
+            : API_ENDPOINTS.USER.HISTORY(userId);
+
+        return this.request(url, {
             method: 'GET',
         });
     }
@@ -216,7 +248,54 @@ class ApiClient {
      * Get user statistics
      */
     async getUserStats(userId: string): Promise<ApiResponse<any>> {
-        return this.request(`/api/user/${userId}/stats`, {
+        return this.request(API_ENDPOINTS.USER.STATS(userId), {
+            method: 'GET',
+        });
+    }
+
+    /**
+     * Get active internet shares for a user
+     */
+    async getActiveShares(userId: string): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.ACTIVE_SHARES(userId), {
+            method: 'GET',
+        });
+    }
+
+    /**
+     * Stop/delete an active share
+     */
+    async stopActiveShare(userId: string, shareCode: string): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.STOP_SHARE(userId, shareCode), {
+            method: 'DELETE',
+        });
+    }
+
+    /**
+     * Track transfer analytics/history event
+     */
+    async trackTransferEvent(userId: string, event: Record<string, any>): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.TRACK_EVENT(userId), {
+            method: 'POST',
+            body: event,
+        });
+    }
+
+    /**
+     * Track transfer event without user identity (guest mode)
+     */
+    async trackAnonymousTransferEvent(event: Record<string, any>): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.TRACK_EVENT_ANON, {
+            method: 'POST',
+            body: event,
+        });
+    }
+
+    /**
+     * Get global admin analytics summary
+     */
+    async getAdminAnalyticsSummary(): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.ADMIN_ANALYTICS, {
             method: 'GET',
         });
     }

@@ -10,6 +10,15 @@ export const API_ENDPOINTS = {
         CONSUME: (code: string) => `${API_BASE_URL}/shares/${code}/consume`,
         VALIDATE: (code: string) => `${API_BASE_URL}/shares/validate/${code}`,
     },
+    USER: {
+        HISTORY: (userId: string) => `${API_BASE_URL}/user/${userId}/history`,
+        STATS: (userId: string) => `${API_BASE_URL}/user/${userId}/stats`,
+        ACTIVE_SHARES: (userId: string) => `${API_BASE_URL}/user/${userId}/active-shares`,
+        STOP_SHARE: (userId: string, shareCode: string) => `${API_BASE_URL}/user/${userId}/active-shares/${shareCode}`,
+        TRACK_EVENT: (userId: string) => `${API_BASE_URL}/user/${userId}/analytics/event`,
+        TRACK_EVENT_ANON: `${API_BASE_URL}/user/analytics/event`,
+        ADMIN_ANALYTICS: `${API_BASE_URL}/user/admin/analytics/summary`,
+    },
     QR: {
         GENERATE: `${API_BASE_URL}/qr/generate`,
     },

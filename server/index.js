@@ -10,6 +10,7 @@ import corsMiddleware from './middleware/cors.js';
 import sharesRouter from './routes/shares.js';
 import userRouter from './routes/user.js';
 import p2pRouter from './routes/p2p.js';
+import { startAnalyticsQueueFlusher } from './services/analyticsQueue.js';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -29,6 +30,9 @@ try {
 app.use(corsMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Start background analytics flusher (non-blocking).
+startAnalyticsQueueFlusher();
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

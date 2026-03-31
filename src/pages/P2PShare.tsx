@@ -12,6 +12,8 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Header } from '@/components/Header';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiClient } from '@/lib/api/client';
 import { useP2PSession } from '@/features/p2p-share/hooks/useP2PSession';
 import {
     filesToEntries,
@@ -31,6 +33,7 @@ type TransferState = 'idle' | 'selecting' | 'sharing' | 'transferring' | 'succes
 
 const P2PShare = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [mode, setMode] = useState<Mode>('choose');
     const [transferState, setTransferState] = useState<TransferState>('idle');
     const [copied, setCopied] = useState(false);
@@ -56,6 +59,23 @@ const P2PShare = () => {
         joinSession,
         disconnect,
     } = useP2PSession();
+
+    const trackEvent = useCallback((event: Record<string, any>) => {
+        const payload = {
+            ...event,
+            transferType: 'p2p',
+            is_ephemeral: event?.is_ephemeral === true,
+            clientTimestamp: new Date().toISOString(),
+        };
+
+        const request = user?.uid
+            ? apiClient.trackTransferEvent(user.uid, payload)
+            : apiClient.trackAnonymousTransferEvent(payload);
+
+        void request.catch(() => {
+            // Intentionally ignored to avoid affecting transfer path.
+        });
+    }, [user?.uid]);
 
     // Listen for incoming batch requests when connected as receiver
     useEffect(() => {
@@ -102,6 +122,19 @@ const P2PShare = () => {
         if (!code) {
             setTransferState('error');
             setErrorMessage(sessionError || 'Failed to create session');
+            trackEvent({
+                direction: 'send',
+                status: 'failed',
+                error: sessionError || 'Failed to create session',
+            });
+        } else {
+            trackEvent({
+                direction: 'send',
+                status: 'active',
+                shareCode: code,
+                fileName: `${selectedFiles.length} files`,
+                totalBytes: selectedFiles.reduce((sum, entry) => sum + entry.file.size, 0),
+            });
         }
     };
 
@@ -116,6 +149,7 @@ const P2PShare = () => {
     const handleSend = async () => {
         if (!connection || selectedFiles.length === 0) return;
 
+        const startedAt = Date.now();
         const ac = new AbortController();
         transferAbortRef.current = ac;
         setTransferState('transferring');
@@ -124,12 +158,35 @@ const P2PShare = () => {
             await sendBatch(selectedFiles, connection, (p) => setProgress(p), ac.signal);
             setTransferState('success');
             toast.success('All files sent successfully!');
+
+            const totalBytes = progress?.totalBytes || selectedFiles.reduce((sum, entry) => sum + entry.file.size, 0);
+            const durationMs = Date.now() - startedAt;
+            const speedBytesPerSec = durationMs > 0 ? Math.round(totalBytes / (durationMs / 1000)) : 0;
+            trackEvent({
+                shareCode,
+                direction: 'send',
+                status: 'success',
+                fileName: selectedFiles.length === 1 ? selectedFiles[0].file.name : `${selectedFiles.length} files`,
+                fileType: selectedFiles.length === 1 ? (selectedFiles[0].file.type || 'application/octet-stream') : 'application/octet-stream',
+                fileSize: totalBytes,
+                totalBytes,
+                durationMs,
+                speedBytesPerSec,
+                retries: 0,
+            });
         } catch (err: any) {
             if (err?.name === 'AbortError') return; // user cancelled, no toast
             console.error('Send failed:', err);
             setTransferState('error');
             setErrorMessage(err.message || 'Transfer failed');
             toast.error(err.message || 'Transfer failed');
+            trackEvent({
+                shareCode,
+                direction: 'send',
+                status: 'failed',
+                error: err.message || 'Transfer failed',
+                durationMs: Date.now() - startedAt,
+            });
         } finally {
             transferAbortRef.current = null;
         }
@@ -153,6 +210,8 @@ const P2PShare = () => {
     const handleAccept = async () => {
         if (!pendingTransfer) return;
 
+        const startedAt = Date.now();
+        const acceptedTransfer = pendingTransfer;
         const ac = new AbortController();
         transferAbortRef.current = ac;
         setTransferState('transferring');
@@ -165,12 +224,38 @@ const P2PShare = () => {
             setTransferState('success');
             toast.success(`Received ${results.length} file(s)!`);
             downloadAllFiles(results);
+
+            const totalBytes = progress?.totalBytes || results.reduce((sum, result) => sum + result.metadata.size, 0);
+            const durationMs = Date.now() - startedAt;
+            const speedBytesPerSec = durationMs > 0 ? Math.round(totalBytes / (durationMs / 1000)) : 0;
+
+            trackEvent({
+                shareCode,
+                transferId: acceptedTransfer.transferId,
+                direction: 'receive',
+                status: 'success',
+                fileName: results.length === 1 ? results[0].metadata.name : `${results.length} files`,
+                fileType: results.length === 1 ? results[0].metadata.type : 'application/octet-stream',
+                fileSize: totalBytes,
+                totalBytes,
+                durationMs,
+                speedBytesPerSec,
+                retries: 0,
+            });
         } catch (err: any) {
             if (err?.name === 'AbortError') return;
             console.error('Receive failed:', err);
             setTransferState('error');
             setErrorMessage(err.message || 'Transfer failed');
             toast.error(err.message || 'Receive failed');
+            trackEvent({
+                shareCode,
+                transferId: acceptedTransfer.transferId,
+                direction: 'receive',
+                status: 'failed',
+                error: err.message || 'Receive failed',
+                durationMs: Date.now() - startedAt,
+            });
         } finally {
             transferAbortRef.current = null;
         }
@@ -185,6 +270,13 @@ const P2PShare = () => {
     };
 
     const handleCancel = () => {
+        trackEvent({
+            shareCode,
+            direction: role === 'receiver' ? 'receive' : 'send',
+            status: 'cancelled',
+            totalBytes: progress?.bytesTransferred || 0,
+            durationMs: 0,
+        });
         transferAbortRef.current?.abort();
         transferAbortRef.current = null;
         setTransferState('idle');

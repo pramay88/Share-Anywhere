@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
+import { getCurrentUser } from '@/integrations/firebase/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const isDev = import.meta.env.DEV === true;
@@ -219,7 +220,11 @@ export function useP2PSession(): UseP2PSessionReturn {
             const response = await fetch(`${API_BASE}/p2p/create-session`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ peerId }),
+                body: JSON.stringify({
+                    peerId,
+                    userId: getCurrentUser()?.uid || null,
+                    is_ephemeral: false,
+                }),
             });
 
             if (!response.ok) {

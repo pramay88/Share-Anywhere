@@ -1,17 +1,309 @@
 /**
- * User Stats and History Routes
+ * User routes (data model v2)
  */
 
 import express from 'express';
 import { getFirestore } from '../config/firebase.js';
 import { validateApiKey, publicRateLimiter } from '../middleware/auth.js';
+import { enqueueAnalyticsEvent, getAnalyticsQueueStats } from '../services/analyticsQueue.js';
 
 const router = express.Router();
+const DATA_VERSION = 2;
+
+function toDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value.toDate === 'function') return value.toDate();
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeHistoryRecord(raw, id) {
+    return {
+        id,
+        transferId: raw.transferId || null,
+        shareCode: raw.shareCode || null,
+        transferType: raw.transferType || 'internet',
+        direction: raw.direction || 'send',
+        status: raw.status || 'success',
+        fileName: raw.file?.name || null,
+        fileType: raw.file?.type || null,
+        fileSize: raw.file?.size || 0,
+        totalBytes: raw.totalBytes || 0,
+        downloadsCount: raw.downloadsCount || 0,
+        durationMs: raw.durationMs || 0,
+        speedBytesPerSec: raw.speedBytesPerSec || 0,
+        retries: raw.retries || 0,
+        error: raw.error || null,
+        timestamp: toDate(raw.timestamp || raw.createdAt)?.toISOString() || new Date().toISOString(),
+    };
+}
+
+/**
+ * POST /api/user/analytics/event
+ * Ingest guest/anonymous events without a user id.
+ */
+router.post('/analytics/event', publicRateLimiter, async (req, res) => {
+    try {
+        const accepted = enqueueAnalyticsEvent({
+            ...req.body,
+            userId: null,
+            clientTimestamp: req.body?.clientTimestamp || new Date().toISOString(),
+        });
+
+        res.status(202).json({
+            success: accepted,
+            queued: accepted,
+            version: DATA_VERSION,
+        });
+    } catch (error) {
+        console.error('Error queuing anonymous analytics event:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to queue analytics event',
+            message: error.message,
+        });
+    }
+});
+
+/**
+ * GET /api/user/admin/analytics/summary
+ * Aggregated global metrics only.
+ */
+router.get('/admin/analytics/summary', publicRateLimiter, async (req, res) => {
+    try {
+        const db = getFirestore();
+        const globalDoc = await db.collection('analytics').doc('global').get();
+        const data = globalDoc.exists ? globalDoc.data() : {};
+
+        const totalTransfers = data?.total_transfers || 0;
+        const totalBytes = data?.total_bytes || 0;
+        const totalDuration = data?.total_duration || 0;
+        const avgSpeed = totalTransfers >= 1 && totalDuration > 0
+            ? totalBytes / (totalDuration / 1000)
+            : 0;
+
+        res.json({
+            success: true,
+            version: DATA_VERSION,
+            analytics: {
+                total_transfers: totalTransfers,
+                total_bytes: totalBytes,
+                total_duration: totalDuration,
+                total_failures: data?.total_failures || 0,
+                total_retries: data?.total_retries || 0,
+                total_downloads: data?.total_downloads || 0,
+                avg_speed_bytes_per_sec: avgSpeed,
+                updatedAt: toDate(data?.updatedAt)?.toISOString() || null,
+            },
+            queue: getAnalyticsQueueStats(),
+        });
+    } catch (error) {
+        console.error('Error fetching admin analytics summary:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch admin analytics summary',
+            message: error.message,
+        });
+    }
+});
+
+/**
+ * POST /api/user/:userId/analytics/event
+ * Ingest user analytics/history events asynchronously.
+ */
+router.post('/:userId/analytics/event', publicRateLimiter, async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID is required',
+            });
+        }
+
+        const accepted = enqueueAnalyticsEvent({
+            ...req.body,
+            userId,
+            clientTimestamp: req.body?.clientTimestamp || new Date().toISOString(),
+        });
+
+        res.status(202).json({
+            success: accepted,
+            queued: accepted,
+            version: DATA_VERSION,
+        });
+    } catch (error) {
+        console.error('Error queuing analytics event:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to queue analytics event',
+            message: error.message,
+        });
+    }
+});
+
+/**
+ * GET /api/user/:userId/active-shares
+ * Ongoing transfers only.
+ */
+router.get('/:userId/active-shares', publicRateLimiter, async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID is required',
+            });
+        }
+
+        const db = getFirestore();
+        const snapshot = await db
+            .collection('active_shares')
+            .where('version', '==', DATA_VERSION)
+            .where('userId', '==', userId)
+            .limit(500)
+            .get();
+
+        const transfersSnapshot = await db
+            .collection('transfers')
+            .where('owner_id', '==', userId)
+            .limit(500)
+            .get();
+
+        const queueActiveShares = snapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((row) => ['active', 'pending'].includes(String(row.status || '').toLowerCase()))
+            .sort((a, b) => {
+                const at = toDate(a.updatedAt || a.startedAt)?.getTime() || 0;
+                const bt = toDate(b.updatedAt || b.startedAt)?.getTime() || 0;
+                return bt - at;
+            })
+            .map((row) => ({
+                id: row.id,
+                transferId: row.transferId || null,
+                shareCode: row.shareCode || null,
+                transferType: row.transferType || 'internet',
+                direction: row.direction || 'send',
+                status: row.status || 'active',
+                fileName: row.file?.name || null,
+                fileType: row.file?.type || null,
+                fileSize: row.file?.size || 0,
+                totalBytes: row.totalBytes || 0,
+                downloads_count: row.downloads_count || 0,
+                is_ephemeral: row.is_ephemeral === true,
+                timestamp: toDate(row.startedAt)?.toISOString() || new Date().toISOString(),
+            }));
+
+        const transferActiveShares = transfersSnapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((row) => {
+                const expiresAt = toDate(row.expires_at || row.expiresAt);
+                return !expiresAt || expiresAt.getTime() > Date.now();
+            })
+            .map((row) => ({
+                id: `transfer_${row.id}`,
+                transferId: row.id,
+                shareCode: row.share_code || row.shareCode || null,
+                transferType: 'internet',
+                direction: 'send',
+                status: 'active',
+                fileName: row.content_type === 'text' ? 'Text content' : null,
+                fileType: row.content_type === 'text' ? 'text/plain' : null,
+                fileSize: 0,
+                totalBytes: 0,
+                downloads_count: 0,
+                is_ephemeral: row.is_ephemeral === true,
+                timestamp: toDate(row.created_at || row.createdAt)?.toISOString() || new Date().toISOString(),
+            }));
+
+        const seenShareCodes = new Set(queueActiveShares.map((item) => item.shareCode).filter(Boolean));
+        const fallbackShares = transferActiveShares.filter((item) => !item.shareCode || !seenShareCodes.has(item.shareCode));
+        const activeShares = [...queueActiveShares, ...fallbackShares].sort((a, b) => {
+            const at = toDate(a.timestamp)?.getTime() || 0;
+            const bt = toDate(b.timestamp)?.getTime() || 0;
+            return bt - at;
+        });
+
+        res.json({
+            success: true,
+            version: DATA_VERSION,
+            activeShares,
+            count: activeShares.length,
+        });
+    } catch (error) {
+        console.error('Error fetching active shares:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch active shares',
+            message: error.message,
+        });
+    }
+});
+
+/**
+ * DELETE /api/user/:userId/active-shares/:shareCode
+ * Stop an active share.
+ */
+router.delete('/:userId/active-shares/:shareCode', publicRateLimiter, async (req, res) => {
+    try {
+        const { userId, shareCode } = req.params;
+
+        if (!userId || !shareCode) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID and share code are required',
+            });
+        }
+
+        enqueueAnalyticsEvent({
+            userId,
+            shareCode: shareCode.toUpperCase(),
+            transferType: 'internet',
+            direction: 'send',
+            status: 'cancelled',
+            retries: 0,
+            durationMs: 0,
+            totalBytes: 0,
+            metadata: { source: 'active-share-delete' },
+            clientTimestamp: new Date().toISOString(),
+        });
+
+        const db = getFirestore();
+        const snapshot = await db
+            .collection('active_shares')
+            .where('version', '==', DATA_VERSION)
+            .where('userId', '==', userId)
+            .where('shareCode', '==', shareCode.toUpperCase())
+            .limit(20)
+            .get();
+
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+        if (!snapshot.empty) {
+            await batch.commit();
+        }
+
+        res.json({
+            success: true,
+            version: DATA_VERSION,
+            message: 'Share stopped successfully',
+        });
+    } catch (error) {
+        console.error('Error stopping active share:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to stop active share',
+            message: error.message,
+        });
+    }
+});
 
 /**
  * GET /api/user/:userId/history
- * Get user's share history (last 24 hours)
- * Public endpoint (user can only access their own history via frontend auth)
+ * Completed/failed/cancelled transfers only.
  */
 router.get('/:userId/history', publicRateLimiter, async (req, res) => {
     try {
@@ -24,63 +316,44 @@ router.get('/:userId/history', publicRateLimiter, async (req, res) => {
             });
         }
 
-        const db = getFirestore();
-        const now = new Date();
-        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+        const cursor = req.query.cursor ? parseInt(req.query.cursor, 10) : null;
+        const typeFilter = req.query.type ? String(req.query.type).toLowerCase() : null;
+        const statusFilter = req.query.status ? String(req.query.status).toLowerCase() : null;
 
-        // Query transfers owned by this user (using actual schema: transfers collection)
-        const transfersSnapshot = await db
-            .collection('transfers')
-            .where('owner_id', '==', userId)
+        const db = getFirestore();
+        const snapshot = await db
+            .collection('history')
+            .where('version', '==', DATA_VERSION)
+            .where('userId', '==', userId)
+            .limit(2000)
             .get();
 
-        const shares = [];
+        let records = snapshot.docs
+            .map((doc) => normalizeHistoryRecord(doc.data(), doc.id))
+            .filter((record) => ['success', 'failed', 'cancelled'].includes(record.status))
+            .filter((record) => {
+                const ts = new Date(record.timestamp).getTime();
+                if (cursor && Number.isFinite(cursor) && ts >= cursor) return false;
+                if (typeFilter && record.transferType !== typeFilter) return false;
+                if (statusFilter && record.status !== statusFilter) return false;
+                return true;
+            })
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-        // Process each transfer
-        for (const doc of transfersSnapshot.docs) {
-            const data = doc.data();
-
-            // Filter by date in memory
-            const createdAt = data.created_at?.toDate();
-            if (!createdAt || createdAt < twentyFourHoursAgo) {
-                continue; // Skip transfers older than 24 hours
-            }
-
-            const expiresAt = data.expires_at?.toDate();
-            const isExpired = expiresAt && expiresAt < now;
-
-            // Get files for this transfer
-            const filesSnapshot = await db
-                .collection('transfers')
-                .doc(doc.id)
-                .collection('files')
-                .get();
-
-            const files = filesSnapshot.docs.map(f => f.data());
-            const totalSize = files.reduce((sum, f) => sum + (f.file_size || 0), 0);
-
-            shares.push({
-                code: data.share_code,
-                type: data.content_type === 'text' ? 'text' : 'file',
-                fileName: files.length > 0 ? files[0].original_name : (data.text_content ? 'Text' : null),
-                content: data.text_content || null,
-                size: totalSize || (data.text_content?.length || 0),
-                mimeType: files.length > 0 ? files[0].mime_type : 'text/plain',
-                createdAt: createdAt.toISOString(),
-                expiresAt: expiresAt ? expiresAt.toISOString() : null,
-                status: isExpired ? 'expired' : 'active',
-                downloadCount: 0, // Not tracked in current schema
-                cloudinaryPublicId: files.length > 0 ? files[0].cloudinary_public_id : null,
-            });
-        }
-
-        // Sort by creation date (newest first)
-        shares.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const paginated = records.slice(0, limit);
+        const last = paginated[paginated.length - 1] || null;
 
         res.json({
             success: true,
-            shares,
-            count: shares.length,
+            version: DATA_VERSION,
+            records: paginated,
+            pagination: {
+                limit,
+                hasMore: records.length > limit,
+                nextCursor: last ? new Date(last.timestamp).getTime() : null,
+            },
+            count: paginated.length,
         });
     } catch (error) {
         console.error('Error fetching user history:', error);
@@ -94,8 +367,7 @@ router.get('/:userId/history', publicRateLimiter, async (req, res) => {
 
 /**
  * GET /api/user/:userId/stats
- * Get user statistics
- * Public endpoint (user can only access their own stats via frontend auth)
+ * User-level analytics summary (aggregated only).
  */
 router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
     try {
@@ -110,47 +382,56 @@ router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
 
         const db = getFirestore();
 
-        // Count user's transfers for stats
-        const transfersSnapshot = await db
-            .collection('transfers')
-            .where('owner_id', '==', userId)
-            .get();
+        const [analyticsDoc, activeSnapshot, transfersSnapshot] = await Promise.all([
+            db.collection('analytics_users').doc(userId).get(),
+            db.collection('active_shares')
+                .where('version', '==', DATA_VERSION)
+                .where('userId', '==', userId)
+                .limit(500)
+                .get(),
+            db.collection('transfers')
+                .where('owner_id', '==', userId)
+                .limit(1000)
+                .get(),
+        ]);
 
-        const now = new Date();
-        let totalSends = 0;
-        let activeShares = 0;
-        let totalDataShared = 0;
+        const analytics = analyticsDoc.exists ? analyticsDoc.data() : {};
 
-        for (const doc of transfersSnapshot.docs) {
+        const totalTransfers = analytics?.total_transfers || 0;
+        const totalBytes = analytics?.total_bytes || 0;
+        const totalDuration = analytics?.total_duration || 0;
+        const avgSpeed = totalTransfers >= 1 && totalDuration > 0
+            ? totalBytes / (totalDuration / 1000)
+            : 0;
+
+        const activeSharesFromQueue = activeSnapshot.docs.filter((doc) => {
+            const status = String(doc.data()?.status || '').toLowerCase();
+            return status === 'active' || status === 'pending';
+        }).length;
+
+        const activeSharesFromTransfers = transfersSnapshot.docs.filter((doc) => {
             const data = doc.data();
-            totalSends++;
+            const expiresAt = toDate(data?.expires_at || data?.expiresAt);
+            return !expiresAt || expiresAt.getTime() > Date.now();
+        }).length;
 
-            // Check if active
-            const expiresAt = data.expires_at?.toDate();
-            if (!expiresAt || expiresAt > now) {
-                activeShares++;
-            }
-
-            // Get files to calculate total data
-            const filesSnapshot = await db
-                .collection('transfers')
-                .doc(doc.id)
-                .collection('files')
-                .get();
-
-            filesSnapshot.docs.forEach(f => {
-                totalDataShared += f.data().file_size || 0;
-            });
-        }
+        const activeShares = Math.max(activeSharesFromQueue, activeSharesFromTransfers);
 
         res.json({
             success: true,
+            version: DATA_VERSION,
             stats: {
-                totalSends,
-                totalReceives: 0, // Not tracked in current schema
-                totalDataShared,
+                totalSends: totalTransfers,
+                totalReceives: analytics?.total_downloads || 0,
+                totalDataShared: totalBytes,
                 activeShares,
-                lastUpdated: new Date().toISOString(),
+                totalFailures: analytics?.total_failures || 0,
+                totalRetries: analytics?.total_retries || 0,
+                averageSpeedBytesPerSec: avgSpeed,
+                total_bytes: totalBytes,
+                total_duration: totalDuration,
+                total_transfers: totalTransfers,
+                lastUpdated: toDate(analytics?.updatedAt)?.toISOString() || new Date().toISOString(),
             },
         });
     } catch (error) {
@@ -165,65 +446,14 @@ router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
 
 /**
  * POST /api/user/:userId/stats/increment
- * Increment user statistics
- * Protected: Requires API key
+ * Kept for compatibility.
  */
 router.post('/:userId/stats/increment', validateApiKey, async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const { field, value } = req.body;
-
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                error: 'User ID is required',
-            });
-        }
-
-        if (!field || !['totalSends', 'totalReceives', 'totalDataShared', 'activeShares'].includes(field)) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid field. Must be totalSends, totalReceives, totalDataShared, or activeShares',
-            });
-        }
-
-        const db = getFirestore();
-        const statsRef = db.collection('userStats').doc(userId);
-        const statsDoc = await statsRef.get();
-
-        const incrementValue = typeof value === 'number' ? value : 1;
-        const now = new Date();
-
-        if (statsDoc.exists) {
-            // Update existing stats
-            const currentStats = statsDoc.data();
-            await statsRef.update({
-                [field]: (currentStats[field] || 0) + incrementValue,
-                lastUpdated: now,
-            });
-        } else {
-            // Create new stats document
-            await statsRef.set({
-                totalSends: field === 'totalSends' ? incrementValue : 0,
-                totalReceives: field === 'totalReceives' ? incrementValue : 0,
-                totalDataShared: field === 'totalDataShared' ? incrementValue : 0,
-                activeShares: field === 'activeShares' ? incrementValue : 0,
-                lastUpdated: now,
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Stats updated successfully',
-        });
-    } catch (error) {
-        console.error('Error updating user stats:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update stats',
-            message: error.message,
-        });
-    }
+    res.json({
+        success: true,
+        version: DATA_VERSION,
+        message: 'Stats increment endpoint is deprecated in v2. Use analytics events.',
+    });
 });
 
 export default router;
