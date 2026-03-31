@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
         STATS: (userId: string) => `${API_BASE_URL}/user/${userId}/stats`,
         ACTIVE_SHARES: (userId: string) => `${API_BASE_URL}/user/${userId}/active-shares`,
         STOP_SHARE: (userId: string, shareCode: string) => `${API_BASE_URL}/user/${userId}/active-shares/${shareCode}`,
+        TERMINATE_SHARE: (userId: string, shareId: string) => `${API_BASE_URL}/user/${userId}/shares/${shareId}/terminate`,
         TRACK_EVENT: (userId: string) => `${API_BASE_URL}/user/${userId}/analytics/event`,
         TRACK_EVENT_ANON: `${API_BASE_URL}/user/analytics/event`,
         ADMIN_ANALYTICS: `${API_BASE_URL}/user/admin/analytics/summary`,

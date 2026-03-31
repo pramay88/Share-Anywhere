@@ -279,6 +279,15 @@ class ApiClient {
     }
 
     /**
+     * Terminate an active share by ID
+     */
+    async terminateShare(userId: string, shareId: string): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.TERMINATE_SHARE(userId, shareId), {
+            method: 'POST',
+        });
+    }
+
+    /**
      * Track transfer analytics/history event
      */
     async trackTransferEvent(userId: string, event: Record<string, any>): Promise<ApiResponse<any>> {

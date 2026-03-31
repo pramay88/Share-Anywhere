@@ -160,22 +160,43 @@ router.get('/:userId/active-shares', publicRateLimiter, async (req, res) => {
         }
 
         const db = getFirestore();
-        const snapshot = await db
-            .collection('active_shares')
-            .where('version', '==', DATA_VERSION)
-            .where('userId', '==', userId)
-            .limit(500)
-            .get();
-
-        const transfersSnapshot = await db
-            .collection('transfers')
-            .where('owner_id', '==', userId)
-            .limit(500)
-            .get();
+        const [snapshot, transfersSnapshot, sharesSnapshotByOwnerId, sharesSnapshotByOwnerSnake] = await Promise.all([
+            db
+                .collection('active_shares')
+                .where('version', '==', DATA_VERSION)
+                .where('userId', '==', userId)
+                .limit(500)
+                .get(),
+            db
+                .collection('transfers')
+                .where('owner_id', '==', userId)
+                .limit(500)
+                .get(),
+            db
+                .collection('shares')
+                .where('ownerId', '==', userId)
+                .limit(500)
+                .get(),
+            db
+                .collection('shares')
+                .where('owner_id', '==', userId)
+                .limit(500)
+                .get(),
+        ]);
 
         const queueActiveShares = snapshot.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
-            .filter((row) => ['active', 'pending'].includes(String(row.status || '').toLowerCase()))
+            .filter((row) => {
+                const isActiveStatus = ['active', 'pending'].includes(String(row.status || '').toLowerCase());
+                if (!isActiveStatus) return false;
+
+                // P2P is one-time and should never be listed as active.
+                if (String(row.transferType || '').toLowerCase() === 'p2p') {
+                    return false;
+                }
+
+                return true;
+            })
             .sort((a, b) => {
                 const at = toDate(a.updatedAt || a.startedAt)?.getTime() || 0;
                 const bt = toDate(b.updatedAt || b.startedAt)?.getTime() || 0;
@@ -197,31 +218,153 @@ router.get('/:userId/active-shares', publicRateLimiter, async (req, res) => {
                 timestamp: toDate(row.startedAt)?.toISOString() || new Date().toISOString(),
             }));
 
-        const transferActiveShares = transfersSnapshot.docs
+        const transferRows = transfersSnapshot.docs
             .map((doc) => ({ id: doc.id, ...doc.data() }))
             .filter((row) => {
                 const expiresAt = toDate(row.expires_at || row.expiresAt);
                 return !expiresAt || expiresAt.getTime() > Date.now();
             })
-            .map((row) => ({
+            ;
+
+        const transferActiveShares = await Promise.all(transferRows.map(async (row) => {
+            let fileName = null;
+            let fileType = null;
+            let fileSize = 0;
+
+            if (row.content_type === 'text') {
+                const textContent = String(row.text_content || row.textContent || '');
+                fileName = 'Text content';
+                fileType = 'text/plain';
+                fileSize = textContent ? Buffer.byteLength(textContent, 'utf8') : Number(row.total_bytes || row.totalBytes || 0);
+            } else {
+                try {
+                    const filesSnapshot = await db.collection('transfers').doc(row.id).collection('files').limit(1).get();
+                    if (!filesSnapshot.empty) {
+                        const file = filesSnapshot.docs[0].data();
+                        fileName = file.original_name || file.file_name || null;
+                        fileType = file.mime_type || file.file_type || null;
+                        fileSize = Number(file.file_size || file.size || 0);
+                    }
+                } catch {
+                    // Keep response resilient if subcollection read fails.
+                }
+            }
+
+            const totalBytes = Number(row.total_bytes || row.totalBytes || fileSize || 0);
+            return {
                 id: `transfer_${row.id}`,
                 transferId: row.id,
-                shareCode: row.share_code || row.shareCode || null,
+                shareCode: row.share_code || row.shareCode || row.id || null,
                 transferType: 'internet',
                 direction: 'send',
                 status: 'active',
-                fileName: row.content_type === 'text' ? 'Text content' : null,
-                fileType: row.content_type === 'text' ? 'text/plain' : null,
-                fileSize: 0,
-                totalBytes: 0,
-                downloads_count: 0,
+                fileName: row.file_name || row.fileName || fileName || row.share_code || row.id || 'Unknown',
+                fileType: row.file_type || row.fileType || fileType,
+                fileSize: Number(row.file_size || row.fileSize || fileSize || 0),
+                totalBytes,
+                downloads_count: Number(row.consume_count || row.downloads_count || row.downloadCount || 0),
                 is_ephemeral: row.is_ephemeral === true,
                 timestamp: toDate(row.created_at || row.createdAt)?.toISOString() || new Date().toISOString(),
-            }));
+            };
+        }));
 
-        const seenShareCodes = new Set(queueActiveShares.map((item) => item.shareCode).filter(Boolean));
-        const fallbackShares = transferActiveShares.filter((item) => !item.shareCode || !seenShareCodes.has(item.shareCode));
-        const activeShares = [...queueActiveShares, ...fallbackShares].sort((a, b) => {
+        const sharesDocs = [
+            ...sharesSnapshotByOwnerId.docs,
+            ...sharesSnapshotByOwnerSnake.docs,
+        ];
+
+        const sharesActive = sharesDocs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((row) => {
+                const status = String(row.status || '').toLowerCase();
+                if (!['ready', 'pending', 'active'].includes(status)) {
+                    return false;
+                }
+
+                const expiresAt = toDate(row.expiresAt || row.expires_at);
+                if (expiresAt && expiresAt.getTime() <= Date.now()) {
+                    return false;
+                }
+
+                const createdAt = toDate(row.createdAt || row.created_at);
+                const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+                if (createdAt && createdAt.getTime() < twentyFourHoursAgo) {
+                    return false;
+                }
+
+                const isEphemeral = row.is_ephemeral === true || row.isEphemeral === true;
+                const downloads = Number(row.downloadCount || row.downloads_count || 0);
+                if (isEphemeral && downloads > 0) {
+                    return false;
+                }
+
+                return true;
+            })
+            .map((row) => {
+                const contentType = row.contentType || row.type || 'file';
+                let fileName, fileSize, fileType;
+
+                if (contentType === 'text') {
+                    fileName = 'Text content';
+                    fileType = 'text/plain';
+                    fileSize = row.content ? Buffer.byteLength(row.content, 'utf8') : 0;
+                } else if (contentType === 'url') {
+                    fileName = row.title || 'URL link';
+                    fileType = null;
+                    fileSize = 0;
+                } else {
+                    fileName = row.fileName || row.shareCode || row.code || row.id || 'Unknown';
+                    fileSize = Number(row.fileSize || 0);
+                    fileType = row.mimeType || 'application/octet-stream';
+                }
+
+                const shareCode = row.shareCode || row.code || row.id;
+                return {
+                    id: `share_${row.id}`,
+                    transferId: row.transferId || row.id,
+                    shareCode,
+                    transferType: 'internet',
+                    direction: 'send',
+                    status: 'active',
+                    fileName,
+                    fileType,
+                    fileSize,
+                    totalBytes: fileSize,
+                    downloads_count: Number(row.downloadCount || row.downloads_count || 0),
+                    is_ephemeral: row.is_ephemeral === true || row.isEphemeral === true,
+                    timestamp: toDate(row.createdAt || row.created_at)?.toISOString() || new Date().toISOString(),
+                    expiresAt: toDate(row.expiresAt || row.expires_at)?.toISOString() || null,
+                };
+            });
+
+        const shareByCode = new Map(sharesActive.map((item) => [item.shareCode, item]));
+        const shareByTransferId = new Map(sharesActive.map((item) => [item.transferId, item]));
+
+        const enrichFromShares = (item) => {
+            const matched = shareByCode.get(item.shareCode) || shareByTransferId.get(item.transferId) || null;
+            if (!matched) return item;
+            return {
+                ...item,
+                fileName: item.fileName || matched.fileName,
+                fileType: item.fileType || matched.fileType,
+                fileSize: Number(item.fileSize || matched.fileSize || 0),
+                totalBytes: Number(item.totalBytes || matched.totalBytes || matched.fileSize || 0),
+                downloads_count: Number(item.downloads_count || matched.downloads_count || 0),
+            };
+        };
+
+        const normalizedQueue = queueActiveShares.map(enrichFromShares);
+        const normalizedTransfers = transferActiveShares.map(enrichFromShares);
+        const allCandidates = [...sharesActive, ...normalizedQueue, ...normalizedTransfers];
+
+        const seen = new Set();
+        const activeShares = allCandidates.filter((item) => {
+            const key = item.shareCode || item.transferId || item.id;
+            if (!key) return true;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).sort((a, b) => {
             const at = toDate(a.timestamp)?.getTime() || 0;
             const bt = toDate(b.timestamp)?.getTime() || 0;
             return bt - at;
@@ -382,7 +525,7 @@ router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
 
         const db = getFirestore();
 
-        const [analyticsDoc, activeSnapshot, transfersSnapshot] = await Promise.all([
+        const [analyticsDoc, activeSnapshot, transfersSnapshot, sharesSnapshotByOwnerId, sharesSnapshotByOwnerSnake] = await Promise.all([
             db.collection('analytics_users').doc(userId).get(),
             db.collection('active_shares')
                 .where('version', '==', DATA_VERSION)
@@ -390,6 +533,14 @@ router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
                 .limit(500)
                 .get(),
             db.collection('transfers')
+                .where('owner_id', '==', userId)
+                .limit(1000)
+                .get(),
+            db.collection('shares')
+                .where('ownerId', '==', userId)
+                .limit(1000)
+                .get(),
+            db.collection('shares')
                 .where('owner_id', '==', userId)
                 .limit(1000)
                 .get(),
@@ -415,7 +566,23 @@ router.get('/:userId/stats', publicRateLimiter, async (req, res) => {
             return !expiresAt || expiresAt.getTime() > Date.now();
         }).length;
 
-        const activeShares = Math.max(activeSharesFromQueue, activeSharesFromTransfers);
+        const activeSharesFromShares = [...sharesSnapshotByOwnerId.docs, ...sharesSnapshotByOwnerSnake.docs]
+            .filter((doc) => {
+                const data = doc.data();
+                const status = String(data?.status || '').toLowerCase();
+                if (!['ready', 'pending', 'active'].includes(status)) return false;
+
+                const expiresAt = toDate(data?.expiresAt || data?.expires_at);
+                if (expiresAt && expiresAt.getTime() <= Date.now()) return false;
+
+                const isEphemeral = data?.is_ephemeral === true || data?.isEphemeral === true;
+                const downloads = Number(data?.downloadCount || data?.downloads_count || 0);
+                if (isEphemeral && downloads > 0) return false;
+
+                return true;
+            }).length;
+
+        const activeShares = Math.max(activeSharesFromQueue, activeSharesFromTransfers, activeSharesFromShares);
 
         res.json({
             success: true,
@@ -454,6 +621,193 @@ router.post('/:userId/stats/increment', validateApiKey, async (req, res) => {
         version: DATA_VERSION,
         message: 'Stats increment endpoint is deprecated in v2. Use analytics events.',
     });
+});
+
+/**
+ * POST /api/user/:userId/shares/:shareId/terminate
+ * Terminates/expires an active share
+ * - Sets expiresAt to current time
+ * - Marks as expired/terminated
+ * - Keeps history record but makes it unavailable for download
+ */
+router.post('/:userId/shares/:shareId/terminate', publicRateLimiter, async (req, res) => {
+    try {
+        const { userId, shareId } = req.params;
+
+        if (!userId || typeof userId !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID is required',
+            });
+        }
+
+        if (!shareId || typeof shareId !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Share ID is required',
+            });
+        }
+
+        const db = getFirestore();
+        const now = new Date();
+
+        // Case 1: If shareId starts with "transfer_", it's from transfers collection
+        if (shareId.startsWith('transfer_')) {
+            const transferId = shareId.replace('transfer_', '');
+            const transferRef = db.collection('transfers').doc(transferId);
+            const transferDoc = await transferRef.get();
+
+            if (!transferDoc.exists) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Share not found',
+                });
+            }
+
+            const transferData = transferDoc.data();
+
+            // Verify user owns this transfer
+            if (transferData.owner_id !== userId) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Unauthorized',
+                });
+            }
+
+            // Mark as expired
+            await transferRef.update({
+                expires_at: now,
+                status: 'cancelled',
+            });
+
+            // Queue analytics event for termination
+            enqueueAnalyticsEvent({
+                userId,
+                transferId,
+                shareCode: transferData.share_code || null,
+                transferType: 'internet',
+                direction: 'send',
+                status: 'cancelled',
+                retries: 0,
+                durationMs: 0,
+                totalBytes: 0,
+                metadata: { source: 'share-terminate' },
+                clientTimestamp: new Date().toISOString(),
+            });
+
+            return res.json({
+                success: true,
+                version: DATA_VERSION,
+                message: 'Share terminated successfully',
+            });
+        }
+
+        // Case 2: If shareId starts with "share_", it's from shares collection
+        if (shareId.startsWith('share_')) {
+            const docId = shareId.replace('share_', '');
+            const shareRef = db.collection('shares').doc(docId);
+            const shareDoc = await shareRef.get();
+
+            if (!shareDoc.exists) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Share not found',
+                });
+            }
+
+            const shareData = shareDoc.data();
+
+            // Verify user owns this share (check both camelCase and snake_case)
+            if (shareData.ownerId !== userId && shareData.owner_id !== userId) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Unauthorized',
+                });
+            }
+
+            // Mark as expired
+            await shareRef.update({
+                expiresAt: now,
+                status: 'cancelled',
+                terminated: true,
+            });
+
+            // Queue analytics event for termination
+            enqueueAnalyticsEvent({
+                userId,
+                shareCode: shareData.shareCode || shareData.code || docId,
+                transferType: 'internet',
+                direction: 'send',
+                status: 'cancelled',
+                retries: 0,
+                durationMs: 0,
+                totalBytes: 0,
+                metadata: { source: 'share-terminate' },
+                clientTimestamp: new Date().toISOString(),
+            });
+
+            return res.json({
+                success: true,
+                version: DATA_VERSION,
+                message: 'Share terminated successfully',
+            });
+        }
+
+        // Case 3: Raw share code (legacy)
+        const shareRef = db.collection('shares').doc(shareId);
+        const shareDoc = await shareRef.get();
+
+        if (!shareDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                error: 'Share not found',
+            });
+        }
+
+        const shareData = shareDoc.data();
+
+        // Verify user owns this share
+        if (shareData.ownerId !== userId && shareData.owner_id !== userId) {
+            return res.status(403).json({
+                success: false,
+                error: 'Unauthorized',
+            });
+        }
+
+        // Mark as expired
+        await shareRef.update({
+            expiresAt: now,
+            status: 'cancelled',
+            terminated: true,
+        });
+
+        // Queue analytics event for termination
+        enqueueAnalyticsEvent({
+            userId,
+            shareCode: shareId,
+            transferType: 'internet',
+            direction: 'send',
+            status: 'cancelled',
+            retries: 0,
+            durationMs: 0,
+            totalBytes: 0,
+            metadata: { source: 'share-terminate' },
+            clientTimestamp: new Date().toISOString(),
+        });
+
+        res.json({
+            success: true,
+            version: DATA_VERSION,
+            message: 'Share terminated successfully',
+        });
+    } catch (error) {
+        console.error('Error terminating share:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to terminate share',
+            message: error.message,
+        });
+    }
 });
 
 export default router;
