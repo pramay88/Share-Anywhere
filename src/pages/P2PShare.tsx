@@ -153,6 +153,8 @@ const P2PShare = () => {
         if (!connection || selectedFiles.length === 0) return;
 
         const startedAt = Date.now();
+        // Generate a unique transferId for this P2P send session
+        const transferId = `p2p_${shareCode}_${Date.now()}`;
         const ac = new AbortController();
         transferAbortRef.current = ac;
         setTransferState('transferring');
@@ -166,6 +168,7 @@ const P2PShare = () => {
             const durationMs = Date.now() - startedAt;
             const speedBytesPerSec = durationMs > 0 ? Math.round(totalBytes / (durationMs / 1000)) : 0;
             trackEvent({
+                transferId,
                 shareCode,
                 direction: 'send',
                 status: 'success',
@@ -184,6 +187,7 @@ const P2PShare = () => {
             setErrorMessage(err.message || 'Transfer failed');
             toast.error(err.message || 'Transfer failed');
             trackEvent({
+                transferId,
                 shareCode,
                 direction: 'send',
                 status: 'failed',

@@ -24,15 +24,13 @@ import {
     AlertCircle,
     ArrowDown,
     ArrowUp,
-    Database,
-    Download,
+    ArrowUpDown,
     Globe,
+    HardDrive,
     Loader2,
     RefreshCw,
-    Send,
-    Share2,
     Wifi,
-    TrendingUp,
+    Zap,
     X,
     Copy,
     QrCode,
@@ -161,15 +159,6 @@ const History = () => {
         } catch {
             return 'Unknown';
         }
-    }, []);
-
-    const formatDuration = useCallback((durationMs: number) => {
-        if (!durationMs || durationMs <= 0) return '-';
-        const seconds = Math.floor(durationMs / 1000);
-        if (seconds < 60) return `${seconds}s`;
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${minutes}m ${remainingSeconds}s`;
     }, []);
 
     const formatDownloads = useCallback((item: HistoryRecord) => {
@@ -308,20 +297,21 @@ const History = () => {
                 (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             );
 
-            // Compute stats from terminal records only (active shares tracked separately)
-            const totalBytes = terminalRecords.reduce(
+            // Compute stats from all records (terminal + active)
+            const allRecords = [...activeRows, ...terminalRecords];
+            const totalBytes = allRecords.reduce(
                 (sum, r) => sum + (r.totalBytes || r.fileSize || 0),
                 0
             );
             const totalDurationSec =
-                terminalRecords.reduce((sum, r) => sum + (r.durationMs || 0), 0) / 1000;
+                allRecords.reduce((sum, r) => sum + (r.durationMs || 0), 0) / 1000;
 
             const computedStats: UserStats = {
-                totalSends: terminalRecords.filter((r) => r.direction === 'send').length,
-                totalReceives: terminalRecords.filter((r) => r.direction === 'receive').length,
+                totalSends: allRecords.filter((r) => r.direction === 'send').length,
+                totalReceives: allRecords.filter((r) => r.direction === 'receive').length,
                 totalDataShared: totalBytes,
                 activeShares: activeRows.length,
-                totalFailures: terminalRecords.filter((r) => r.status === 'failed').length,
+                totalFailures: allRecords.filter((r) => r.status === 'failed').length,
                 totalRetries: 0,
                 averageSpeedBytesPerSec:
                     totalDurationSec > 0 ? Math.round(totalBytes / totalDurationSec) : 0,
@@ -509,76 +499,53 @@ const History = () => {
                         </Card>
                     )}
 
-                    {/* Stats cards */}
-                    <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4'>
-                        <Card className='p-5 rounded-2xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center justify-between'>
-                                <div>
-                                    <p className='text-sm text-slate-500'>Total Transfers</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>{stats.totalSends}</p>
-                                    <p className='text-sm text-slate-400 mt-1'>Lifetime</p>
-                                </div>
-                                <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100'>
-                                    <Send className='h-5 w-5 text-violet-500' />
+                    {/* Stats cards - compact */}
+                    <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
+                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
+                            <div className='flex items-center gap-3'>
+                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100'>
+                                    <ArrowUpDown className='h-4 w-4 text-violet-600' />
                                 </span>
+                                <div>
+                                    <p className='text-2xl font-bold text-slate-900'>{stats.totalSends + stats.totalReceives}</p>
+                                    <p className='text-xs text-slate-500'>Transfers</p>
+                                </div>
                             </div>
                         </Card>
 
-                        <Card className='p-5 rounded-2xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center justify-between'>
-                                <div>
-                                    <p className='text-sm text-slate-500'>Data Transferred</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>
-                                        {formatBytes(stats.totalDataShared)}
-                                    </p>
-                                    <p className='text-sm text-slate-400 mt-1'>All time</p>
-                                </div>
-                                <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100'>
-                                    <Database className='h-5 w-5 text-sky-500' />
+                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
+                            <div className='flex items-center gap-3'>
+                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-sky-100'>
+                                    <HardDrive className='h-4 w-4 text-sky-600' />
                                 </span>
+                                <div>
+                                    <p className='text-2xl font-bold text-slate-900'>{formatBytes(stats.totalDataShared)}</p>
+                                    <p className='text-xs text-slate-500'>Data</p>
+                                </div>
                             </div>
                         </Card>
 
-                        <Card className='p-5 rounded-2xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center justify-between'>
-                                <div>
-                                    <p className='text-sm text-slate-500'>Active Shares</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>{stats.activeShares}</p>
-                                    <p className='text-sm text-slate-400 mt-1'>Ongoing transfers</p>
-                                </div>
-                                <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100'>
-                                    <Share2 className='h-5 w-5 text-emerald-500' />
+                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
+                            <div className='flex items-center gap-3'>
+                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100'>
+                                    <Zap className='h-4 w-4 text-emerald-600' />
                                 </span>
+                                <div>
+                                    <p className='text-2xl font-bold text-slate-900'>{formatBytes(stats.averageSpeedBytesPerSec)}/s</p>
+                                    <p className='text-xs text-slate-500'>Avg Speed</p>
+                                </div>
                             </div>
                         </Card>
 
-                        <Card className='p-5 rounded-2xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center justify-between'>
-                                <div>
-                                    <p className='text-sm text-slate-500'>Total Downloads</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>{stats.totalReceives}</p>
-                                    <p className='text-sm text-slate-400 mt-1'>Internet + P2P</p>
-                                </div>
-                                <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100'>
-                                    <Download className='h-5 w-5 text-orange-500' />
+                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
+                            <div className='flex items-center gap-3'>
+                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-100'>
+                                    <AlertCircle className='h-4 w-4 text-red-600' />
                                 </span>
-                            </div>
-                        </Card>
-
-                        <Card className='p-5 rounded-2xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center justify-between'>
                                 <div>
-                                    <p className='text-sm text-slate-500'>Avg Speed</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>
-                                        {formatBytes(stats.averageSpeedBytesPerSec)}/s
-                                    </p>
-                                    <p className='text-sm text-slate-400 mt-1'>
-                                        {recentFailures} recent failures
-                                    </p>
+                                    <p className='text-2xl font-bold text-slate-900'>{recentFailures}</p>
+                                    <p className='text-xs text-slate-500'>Failures</p>
                                 </div>
-                                <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-pink-100'>
-                                    <TrendingUp className='h-5 w-5 text-pink-500' />
-                                </span>
                             </div>
                         </Card>
                     </div>
@@ -659,7 +626,6 @@ const History = () => {
                                             <TableRow>
                                                 <TableHead className='pl-6'>Name</TableHead>
                                                 <TableHead>Time</TableHead>
-                                                <TableHead>Dur</TableHead>
                                                 <TableHead>Speed</TableHead>
                                                 <TableHead>Size</TableHead>
                                                 <TableHead>DL</TableHead>
@@ -685,9 +651,6 @@ const History = () => {
                                                         </TableCell>
                                                         <TableCell className='text-slate-500'>
                                                             {formatTimeAgo(item.timestamp)}
-                                                        </TableCell>
-                                                        <TableCell className='text-slate-500'>
-                                                            {formatDuration(item.durationMs)}
                                                         </TableCell>
                                                         <TableCell>
                                                             <span className='inline-flex items-center gap-1.5'>
