@@ -21,16 +21,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api/client';
 import { toast } from 'sonner';
 import {
-    AlertCircle,
     ArrowDown,
     ArrowUp,
-    ArrowUpDown,
     Globe,
-    HardDrive,
     Loader2,
+    Play,
     RefreshCw,
     Wifi,
-    Zap,
     X,
     Copy,
     QrCode,
@@ -383,11 +380,6 @@ const History = () => {
         });
     }, [directionFilter, modeFilter, history, statusFilter, timeFilter]);
 
-    const recentFailures = useMemo(
-        () => history.filter((item) => item.status === 'failed' || item.status === 'cancelled').length,
-        [history]
-    );
-
     // ─── Actions ──────────────────────────────────────────────────────────────
 
     const handleTerminateShare = useCallback(async (shareId: string) => {
@@ -499,55 +491,25 @@ const History = () => {
                         </Card>
                     )}
 
-                    {/* Stats cards - compact */}
-                    <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
-                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center gap-3'>
-                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100'>
-                                    <ArrowUpDown className='h-4 w-4 text-violet-600' />
-                                </span>
-                                <div>
-                                    <p className='text-2xl font-bold text-slate-900'>{stats.totalSends + stats.totalReceives}</p>
-                                    <p className='text-xs text-slate-500'>Transfers</p>
-                                </div>
-                            </div>
-                        </Card>
-
-                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center gap-3'>
-                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-sky-100'>
-                                    <HardDrive className='h-4 w-4 text-sky-600' />
-                                </span>
-                                <div>
-                                    <p className='text-2xl font-bold text-slate-900'>{formatBytes(stats.totalDataShared)}</p>
-                                    <p className='text-xs text-slate-500'>Data</p>
-                                </div>
-                            </div>
-                        </Card>
-
-                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center gap-3'>
-                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100'>
-                                    <Zap className='h-4 w-4 text-emerald-600' />
-                                </span>
-                                <div>
-                                    <p className='text-2xl font-bold text-slate-900'>{formatBytes(stats.averageSpeedBytesPerSec)}/s</p>
-                                    <p className='text-xs text-slate-500'>Avg Speed</p>
-                                </div>
-                            </div>
-                        </Card>
-
-                        <Card className='p-4 rounded-xl border-slate-200/70 shadow-sm'>
-                            <div className='flex items-center gap-3'>
-                                <span className='inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-100'>
-                                    <AlertCircle className='h-4 w-4 text-red-600' />
-                                </span>
-                                <div>
-                                    <p className='text-2xl font-bold text-slate-900'>{recentFailures}</p>
-                                    <p className='text-xs text-slate-500'>Failures</p>
-                                </div>
-                            </div>
-                        </Card>
+                    {/* Stats bar - compact inline */}
+                    <div className='flex items-center gap-6 px-5 py-3 bg-white rounded-xl border border-slate-200/70 shadow-sm'>
+                        <div className='flex items-center gap-2'>
+                            <Play className='h-3 w-3 text-violet-500 fill-violet-500' />
+                            <span className='text-xs font-medium text-slate-500 uppercase tracking-wide'>Transfers</span>
+                            <span className='text-sm font-bold text-slate-900'>{stats.totalSends + stats.totalReceives}</span>
+                        </div>
+                        <div className='h-4 w-px bg-slate-200' />
+                        <div className='flex items-center gap-2'>
+                            <Play className='h-3 w-3 text-sky-500 fill-sky-500' />
+                            <span className='text-xs font-medium text-slate-500 uppercase tracking-wide'>Data</span>
+                            <span className='text-sm font-bold text-slate-900'>{formatBytes(stats.totalDataShared)}</span>
+                        </div>
+                        <div className='h-4 w-px bg-slate-200' />
+                        <div className='flex items-center gap-2'>
+                            <Play className='h-3 w-3 text-emerald-500 fill-emerald-500' />
+                            <span className='text-xs font-medium text-slate-500 uppercase tracking-wide'>Avg</span>
+                            <span className='text-sm font-bold text-slate-900'>{formatBytes(stats.averageSpeedBytesPerSec)}/s</span>
+                        </div>
                     </div>
 
                     {/* Table card */}
