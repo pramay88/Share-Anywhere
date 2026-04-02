@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
@@ -25,7 +24,6 @@ import {
     AlertCircle,
     ArrowDown,
     ArrowUp,
-    Clock3,
     Database,
     Download,
     Globe,
@@ -42,14 +40,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
 
-// Simple cache for reducer debouncing
-const debounce = (fn: Function, delay: number) => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-    return (...args: any[]) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => fn(...args), delay);
-    };
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface HistoryRecord {
     id: string;
@@ -86,11 +77,7 @@ interface QrShareState {
     url: string;
 }
 
-interface HistoryPagination {
-    limit: number;
-    hasMore: boolean;
-    nextCursor: number | null;
-}
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const INITIAL_STATS: UserStats = {
     totalSends: 0,
@@ -102,11 +89,11 @@ const INITIAL_STATS: UserStats = {
     averageSpeedBytesPerSec: 0,
 };
 
-const HISTORY_PAGE_SIZE = 20;
 const CACHE_KEY_PREFIX = 'history_cache_';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Helper to get/set cache
+// ─── Cache helpers ────────────────────────────────────────────────────────────
+
 const getCache = (userId: string) => {
     try {
         const cached = localStorage.getItem(CACHE_KEY_PREFIX + userId);
@@ -122,26 +109,26 @@ const getCache = (userId: string) => {
     }
 };
 
-const setCache = (userId: string, data: any) => {
+const setCache = (userId: string, data: unknown) => {
     try {
-        localStorage.setItem(CACHE_KEY_PREFIX + userId, JSON.stringify({
-            data,
-            timestamp: Date.now(),
-        }));
+        localStorage.setItem(
+            CACHE_KEY_PREFIX + userId,
+            JSON.stringify({ data, timestamp: Date.now() })
+        );
     } catch {
         // Cache failure is non-fatal
     }
 };
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const History = () => {
     const navigate = useNavigate();
     const { user, loading: authLoading } = useAuth();
-    const filterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
     const [history, setHistory] = useState<HistoryRecord[]>([]);
     const [loadingInitial, setLoadingInitial] = useState(true);
-    const [loadingHistory, setLoadingHistory] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [terminatingShares, setTerminatingShares] = useState<Set<string>>(new Set());
@@ -150,12 +137,15 @@ const History = () => {
     const [modeFilter, setModeFilter] = useState<'all' | 'internet' | 'p2p'>('all');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'failed' | 'success' | 'cancelled'>('all');
     const [timeFilter, setTimeFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
+
     const [qrShare, setQrShare] = useState<QrShareState>({
         open: false,
         code: '',
         name: '',
         url: '',
     });
+
+    // ─── Formatters ───────────────────────────────────────────────────────────
 
     const formatBytes = useCallback((bytes: number) => {
         if (!bytes) return '0 B';
@@ -184,44 +174,49 @@ const History = () => {
 
     const formatDownloads = useCallback((item: HistoryRecord) => {
         // P2P is always 1-to-1
-        if (item.transferType === 'p2p') {
-            return '1';
-        }
-        // Internet shares show actual download count
-        return String(item.downloadsCount || "-");
+        if (item.transferType === 'p2p') return '1';
+        return String(item.downloadsCount ?? '-');
     }, []);
 
-    // Color and icon for transfer type based on status
+    // ─── Icon + color logic ───────────────────────────────────────────────────
+    //
+    // P2P  → Wifi icon
+    //   success → green
+    //   failed  → red
+    //   other   → slate (pending/cancelled)
+    //
+    // Internet → Globe icon
+    //   active           → yellow  (share is live, still receivable)
+    //   success/cancelled → green  (transfer completed or manually closed)
+    //   failed            → red
+    //   other (pending)   → slate
+
     const getTransferTypeIcon = useCallback((item: HistoryRecord) => {
         if (item.transferType === 'p2p') {
-            // P2P: green if success, red if failed
-            const isSuccess = item.status === 'success';
-            return {
-                icon: Wifi,
-                className: isSuccess ? 'text-emerald-500' : 'text-red-500',
-            };
-        } else {
-            // Internet/Cloud: red=failed, yellow=active/success, green=expired/cancelled
             let className = 'text-slate-400';
-            if (item.status === 'failed') {
-                className = 'text-red-500';
-            } else if (item.status === 'active' || item.status === 'success') {
-                className = 'text-yellow-500';
-            } else if (item.status === 'expired' || item.status === 'cancelled') {
-                className = 'text-emerald-500';
-            }
-            return {
-                icon: Globe,
-                className,
-            };
+            if (item.status === 'success') className = 'text-emerald-500';
+            else if (item.status === 'failed') className = 'text-red-500';
+            return { icon: Wifi, className };
         }
+
+        // Internet / cloud
+        let className = 'text-slate-400';
+        if (item.status === 'active') {
+            className = 'text-yellow-500';
+        } else if (item.status === 'success' || item.status === 'cancelled') {
+            className = 'text-emerald-500';
+        } else if (item.status === 'failed') {
+            className = 'text-red-500';
+        }
+        return { icon: Globe, className };
     }, []);
 
-    // Fast loading with 2 parallel calls: history + active shares
+    // ─── Data loading ─────────────────────────────────────────────────────────
+
     const loadInitialData = useCallback(async () => {
         if (!user) return;
 
-        // Try cache first for instant paint, then revalidate in background
+        // Paint from cache immediately, then revalidate in background
         const cached = getCache(user.uid);
         if (cached) {
             setHistory(cached.history || []);
@@ -234,38 +229,46 @@ const History = () => {
 
         try {
             const [historyResponse, activeResponse] = await Promise.all([
-                apiClient.getUserHistory(user.uid, {
-                    limit: 1000,
-                }),
+                apiClient.getUserHistory(user.uid, { limit: 1000 }),
                 apiClient.getActiveShares(user.uid),
             ]);
 
             if (!historyResponse.success) {
-                throw new Error((historyResponse as any)?.error?.message || 'Failed to load history');
+                throw new Error(
+                    (historyResponse as any)?.error?.message || 'Failed to load history'
+                );
             }
-
             if (!activeResponse.success) {
-                throw new Error((activeResponse as any)?.error?.message || 'Failed to load active shares');
+                throw new Error(
+                    (activeResponse as any)?.error?.message || 'Failed to load active shares'
+                );
             }
 
             const records = ((historyResponse as any).records || []) as HistoryRecord[];
-            const activeRows = (((activeResponse as any).activeShares || []) as any[]).map((row) => {
+
+            const activeRows = (
+                ((activeResponse as any).activeShares || []) as any[]
+            ).map((row): HistoryRecord => {
                 const startedAtMs = row.startedAt ? new Date(row.startedAt).getTime() : null;
                 const timestampMs = row.timestamp ? new Date(row.timestamp).getTime() : null;
-                const inferredStartMs = Number.isFinite(startedAtMs as number)
-                    ? (startedAtMs as number)
-                    : (Number.isFinite(timestampMs as number) ? (timestampMs as number) : null);
+                const inferredStartMs =
+                    Number.isFinite(startedAtMs as number)
+                        ? (startedAtMs as number)
+                        : Number.isFinite(timestampMs as number)
+                        ? (timestampMs as number)
+                        : null;
 
-                // Calculate duration if durationMs not provided but we have a timestamp/start time.
-                const durationMs = Number(row.durationMs || 0) > 0
-                    ? Number(row.durationMs)
-                    : (inferredStartMs ? Math.max(0, Date.now() - inferredStartMs) : 0);
                 const totalBytes = Number(row.totalBytes || row.fileSize || row.file?.size || 0);
-                
-                // Calculate speed: total_bytes / duration_seconds
-                const speedBytesPerSec = durationMs > 0 && totalBytes > 0
-                    ? Math.round(totalBytes / (durationMs / 1000))
-                    : 0;
+                const durationMs =
+                    Number(row.durationMs || 0) > 0
+                        ? Number(row.durationMs)
+                        : inferredStartMs
+                        ? Math.max(0, Date.now() - inferredStartMs)
+                        : 0;
+                const speedBytesPerSec =
+                    durationMs > 0 && totalBytes > 0
+                        ? Math.round(totalBytes / (durationMs / 1000))
+                        : 0;
 
                 return {
                     id: row.id,
@@ -273,7 +276,7 @@ const History = () => {
                     shareCode: row.shareCode || null,
                     transferType: row.transferType === 'p2p' ? 'p2p' : 'internet',
                     direction: row.direction === 'receive' ? 'receive' : 'send',
-                    status: 'active' as const,
+                    status: 'active',
                     fileName: row.fileName || row.file?.name || row.shareCode || 'Unknown',
                     fileType: row.fileType || row.file?.type || null,
                     fileSize: Number(row.fileSize || row.file?.size || 0),
@@ -284,40 +287,48 @@ const History = () => {
                     error: null,
                     timestamp: row.timestamp || new Date().toISOString(),
                 };
-            }) as HistoryRecord[];
-
-            const terminalRecords = records.filter((r) => r.status !== 'active' && r.status !== 'pending');
-
-            // Active rows must take precedence so currently downloadable shares stay hollow-green.
-            const activeKeys = new Set(
-                activeRows.map((r) => r.shareCode || r.transferId || r.id).filter(Boolean)
-            );
-
-            const filteredTerminalRecords = terminalRecords.filter((r) => {
-                const key = r.shareCode || r.transferId || r.id;
-                return !key || !activeKeys.has(key);
             });
 
-            const mergedRecords = [...activeRows, ...filteredTerminalRecords];
+            // Active entries take precedence — drop any terminal duplicate
+            const activeKeys = new Set(
+                activeRows
+                    .map((r) => r.shareCode || r.transferId || r.id)
+                    .filter(Boolean)
+            );
+
+            const terminalRecords = records
+                .filter((r) => r.status !== 'active' && r.status !== 'pending')
+                .filter((r) => {
+                    const key = r.shareCode || r.transferId || r.id;
+                    return !key || !activeKeys.has(key);
+                });
+
+            // Merge and sort newest-first
+            const mergedRecords = [...activeRows, ...terminalRecords].sort(
+                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+
+            // Compute stats from terminal records only (active shares tracked separately)
+            const totalBytes = terminalRecords.reduce(
+                (sum, r) => sum + (r.totalBytes || r.fileSize || 0),
+                0
+            );
+            const totalDurationSec =
+                terminalRecords.reduce((sum, r) => sum + (r.durationMs || 0), 0) / 1000;
 
             const computedStats: UserStats = {
                 totalSends: terminalRecords.filter((r) => r.direction === 'send').length,
                 totalReceives: terminalRecords.filter((r) => r.direction === 'receive').length,
-                totalDataShared: terminalRecords.reduce((sum, r) => sum + (r.totalBytes || r.fileSize || 0), 0),
+                totalDataShared: totalBytes,
                 activeShares: activeRows.length,
                 totalFailures: terminalRecords.filter((r) => r.status === 'failed').length,
                 totalRetries: 0,
-                // Weighted average: total_bytes / total_duration
-                averageSpeedBytesPerSec: (() => {
-                    const totalBytes = terminalRecords.reduce((sum, r) => sum + (r.totalBytes || r.fileSize || 0), 0);
-                    const totalDurationSec = terminalRecords.reduce((sum, r) => sum + (r.durationMs || 0), 0) / 1000;
-                    return totalDurationSec > 0 ? Math.round(totalBytes / totalDurationSec) : 0;
-                })(),
+                averageSpeedBytesPerSec:
+                    totalDurationSec > 0 ? Math.round(totalBytes / totalDurationSec) : 0,
             };
 
             setHistory(mergedRecords);
             setStats(computedStats);
-
             setCache(user.uid, { history: mergedRecords, stats: computedStats });
         } catch (error: any) {
             setErrorMessage(error.message || 'Failed to load history');
@@ -342,16 +353,13 @@ const History = () => {
     const handleRefresh = async () => {
         setRefreshing(true);
         setHistory([]);
-        if (user) {
-            localStorage.removeItem(CACHE_KEY_PREFIX + user.uid);
-        }
+        if (user) localStorage.removeItem(CACHE_KEY_PREFIX + user.uid);
         await loadInitialData();
     };
 
-    // Memoized filter with debounce for input changes
+    // ─── Filters ──────────────────────────────────────────────────────────────
+
     const handleFilterChange = useCallback((key: string, value: string) => {
-        if (filterTimeoutRef.current) clearTimeout(filterTimeoutRef.current);
-        
         switch (key) {
             case 'direction':
                 setDirectionFilter(value as 'all' | 'send' | 'receive');
@@ -368,50 +376,43 @@ const History = () => {
         }
     }, []);
 
+    // Already sorted newest-first from loadInitialData; filter preserves that order
     const filteredHistory = useMemo(() => {
         const now = Date.now();
-
         return history.filter((item) => {
             if (directionFilter !== 'all' && item.direction !== directionFilter) return false;
             if (modeFilter !== 'all' && item.transferType !== modeFilter) return false;
             if (statusFilter !== 'all' && item.status !== statusFilter) return false;
-
             if (timeFilter !== 'all') {
                 const ts = new Date(item.timestamp).getTime();
                 if (timeFilter === '24h' && ts < now - 24 * 60 * 60 * 1000) return false;
                 if (timeFilter === '7d' && ts < now - 7 * 24 * 60 * 60 * 1000) return false;
                 if (timeFilter === '30d' && ts < now - 30 * 24 * 60 * 60 * 1000) return false;
             }
-
             return true;
         });
     }, [directionFilter, modeFilter, history, statusFilter, timeFilter]);
-
-    const historyHasData = filteredHistory.length > 0;
 
     const recentFailures = useMemo(
         () => history.filter((item) => item.status === 'failed' || item.status === 'cancelled').length,
         [history]
     );
 
+    // ─── Actions ──────────────────────────────────────────────────────────────
+
     const handleTerminateShare = useCallback(async (shareId: string) => {
         if (!user) return;
-
         setTerminatingShares((prev) => new Set([...prev, shareId]));
-
         try {
             const response = await apiClient.terminateShare(user.uid, shareId);
-
             if (!response.success) {
                 throw new Error((response as any)?.error?.message || 'Failed to terminate share');
             }
-
             setHistory((prev) =>
                 prev.map((item) =>
                     item.id === shareId ? { ...item, status: 'cancelled' as const } : item
                 )
             );
-
             toast.success('Share terminated successfully');
         } catch (error: any) {
             toast.error(error.message || 'Failed to terminate share');
@@ -429,7 +430,6 @@ const History = () => {
             toast.error('No share code available');
             return;
         }
-
         try {
             await navigator.clipboard.writeText(shareCode);
             toast.success('Share code copied');
@@ -443,15 +443,11 @@ const History = () => {
             toast.error('No share code available');
             return;
         }
-
         const url = `${window.location.origin}/receive?code=${encodeURIComponent(item.shareCode)}`;
-        setQrShare({
-            open: true,
-            code: item.shareCode,
-            name: item.fileName || 'Shared item',
-            url,
-        });
+        setQrShare({ open: true, code: item.shareCode, name: item.fileName || 'Shared item', url });
     }, []);
+
+    // ─── Render ───────────────────────────────────────────────────────────────
 
     if (authLoading || loadingInitial) {
         return (
@@ -470,31 +466,50 @@ const History = () => {
 
             <div className='flex-1 p-4 sm:p-6 lg:p-10'>
                 <div className='max-w-7xl mx-auto space-y-5'>
+                    {/* Header row */}
                     <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                         <div>
-                            <h1 className='text-3xl font-bold tracking-tight text-slate-900'>Transfer History</h1>
-                            <p className='text-slate-500 mt-1'>
-                                Monitor your file sharing activity
-                            </p>
+                            <h1 className='text-3xl font-bold tracking-tight text-slate-900'>
+                                Transfer History
+                            </h1>
+                            <p className='text-slate-500 mt-1'>Monitor your file sharing activity</p>
                         </div>
-                        <Button variant='outline' size='sm' className='w-full sm:w-auto rounded-xl bg-white' onClick={handleRefresh} disabled={refreshing || loadingHistory}>
+                        <Button
+                            variant='outline'
+                            size='sm'
+                            className='w-full sm:w-auto rounded-xl bg-white'
+                            onClick={handleRefresh}
+                            disabled={refreshing}
+                        >
                             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                             Refresh
                         </Button>
                     </div>
 
+                    {/* Error banner */}
                     {errorMessage && (
                         <Card className='p-4 border-destructive/40 bg-destructive/5'>
                             <div className='flex items-start gap-3'>
                                 <AlertCircle className='h-5 w-5 text-destructive mt-0.5' />
                                 <div>
-                                    <p className='font-medium text-destructive'>Could not load complete history data</p>
+                                    <p className='font-medium text-destructive'>
+                                        Could not load complete history data
+                                    </p>
                                     <p className='text-sm text-muted-foreground mt-1'>{errorMessage}</p>
+                                    <Button
+                                        variant='outline'
+                                        size='sm'
+                                        className='mt-2'
+                                        onClick={handleRefresh}
+                                    >
+                                        Retry
+                                    </Button>
                                 </div>
                             </div>
                         </Card>
                     )}
 
+                    {/* Stats cards */}
                     <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4'>
                         <Card className='p-5 rounded-2xl border-slate-200/70 shadow-sm'>
                             <div className='flex items-center justify-between'>
@@ -513,7 +528,9 @@ const History = () => {
                             <div className='flex items-center justify-between'>
                                 <div>
                                     <p className='text-sm text-slate-500'>Data Transferred</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>{formatBytes(stats.totalDataShared)}</p>
+                                    <p className='text-4xl font-bold mt-2 text-slate-900'>
+                                        {formatBytes(stats.totalDataShared)}
+                                    </p>
                                     <p className='text-sm text-slate-400 mt-1'>All time</p>
                                 </div>
                                 <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100'>
@@ -552,8 +569,12 @@ const History = () => {
                             <div className='flex items-center justify-between'>
                                 <div>
                                     <p className='text-sm text-slate-500'>Avg Speed</p>
-                                    <p className='text-4xl font-bold mt-2 text-slate-900'>{formatBytes(stats.averageSpeedBytesPerSec)}/s</p>
-                                    <p className='text-sm text-slate-400 mt-1'>{recentFailures} recent failures</p>
+                                    <p className='text-4xl font-bold mt-2 text-slate-900'>
+                                        {formatBytes(stats.averageSpeedBytesPerSec)}/s
+                                    </p>
+                                    <p className='text-sm text-slate-400 mt-1'>
+                                        {recentFailures} recent failures
+                                    </p>
                                 </div>
                                 <span className='inline-flex h-10 w-10 items-center justify-center rounded-xl bg-pink-100'>
                                     <TrendingUp className='h-5 w-5 text-pink-500' />
@@ -562,169 +583,183 @@ const History = () => {
                         </Card>
                     </div>
 
+                    {/* Table card */}
                     <Card className='rounded-2xl border-slate-200/70 shadow-sm overflow-hidden'>
+                        {/* Filters */}
                         <div className='p-4 sm:p-5 border-b bg-white'>
                             <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3'>
-                            <select
-                                className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                value={directionFilter}
-                                onChange={(e) => handleFilterChange('direction', e.target.value)}
-                            >
-                                <option value='all'>All activity</option>
-                                <option value='send'>Sent</option>
-                                <option value='receive'>Received</option>
-                            </select>
+                                <select
+                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
+                                    value={directionFilter}
+                                    onChange={(e) => handleFilterChange('direction', e.target.value)}
+                                >
+                                    <option value='all'>All activity</option>
+                                    <option value='send'>Sent</option>
+                                    <option value='receive'>Received</option>
+                                </select>
 
-                            <select
-                                className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                value={statusFilter}
-                                onChange={(e) => handleFilterChange('status', e.target.value)}
-                            >
-                                <option value='all'>All statuses</option>
-                                <option value='success'>Success</option>
-                                <option value='failed'>Failed</option>
-                                <option value='active'>Active</option>
-                                <option value='cancelled'>Cancelled</option>
-                            </select>
+                                <select
+                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
+                                    value={statusFilter}
+                                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                                >
+                                    <option value='all'>All statuses</option>
+                                    <option value='active'>Active</option>
+                                    <option value='success'>Success</option>
+                                    <option value='failed'>Failed</option>
+                                    <option value='cancelled'>Cancelled</option>
+                                </select>
 
-                            <select
-                                className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                value={modeFilter}
-                                onChange={(e) => handleFilterChange('mode', e.target.value)}
-                            >
-                                <option value='all'>All modes</option>
-                                <option value='internet'>Internet</option>
-                                <option value='p2p'>P2P</option>
-                            </select>
+                                <select
+                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
+                                    value={modeFilter}
+                                    onChange={(e) => handleFilterChange('mode', e.target.value)}
+                                >
+                                    <option value='all'>All modes</option>
+                                    <option value='internet'>Internet</option>
+                                    <option value='p2p'>P2P</option>
+                                </select>
 
-                            <select
-                                className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                value={timeFilter}
-                                onChange={(e) => handleFilterChange('time', e.target.value)}
-                            >
-                                <option value='all'>All time</option>
-                                <option value='24h'>Last 24 hours</option>
-                                <option value='7d'>Last 7 days</option>
-                                <option value='30d'>Last 30 days</option>
-                            </select>
+                                <select
+                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
+                                    value={timeFilter}
+                                    onChange={(e) => handleFilterChange('time', e.target.value)}
+                                >
+                                    <option value='all'>All time</option>
+                                    <option value='24h'>Last 24 hours</option>
+                                    <option value='7d'>Last 7 days</option>
+                                    <option value='30d'>Last 30 days</option>
+                                </select>
 
-                            <Button
-                                variant='ghost'
-                                className='h-10 justify-start rounded-xl text-slate-600 hover:text-slate-800'
-                                onClick={() => {
-                                    setDirectionFilter('all');
-                                    setModeFilter('all');
-                                    setStatusFilter('all');
-                                    setTimeFilter('all');
-                                }}
-                            >
-                                <RefreshCw className='mr-2 h-4 w-4' />
-                                Reset Filters
-                            </Button>
+                                <Button
+                                    variant='ghost'
+                                    className='h-10 justify-start rounded-xl text-slate-600 hover:text-slate-800'
+                                    onClick={() => {
+                                        setDirectionFilter('all');
+                                        setModeFilter('all');
+                                        setStatusFilter('all');
+                                        setTimeFilter('all');
+                                    }}
+                                >
+                                    <RefreshCw className='mr-2 h-4 w-4' />
+                                    Reset Filters
+                                </Button>
+                            </div>
                         </div>
-                        </div>
 
-                        {!historyHasData && !loadingHistory ? (
-                            <div className='p-10 text-center'>
+                        {filteredHistory.length === 0 ? (
+                            <div className='p-10 text-center bg-white'>
                                 <p className='text-muted-foreground'>No transfers match your filters yet.</p>
                             </div>
                         ) : (
                             <>
                                 <div className='overflow-x-auto bg-white'>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className='pl-6'>Name</TableHead>
-                                            <TableHead>Time</TableHead>
-                                            <TableHead>Speed</TableHead>
-                                            <TableHead>Size</TableHead>
-                                            <TableHead>DL</TableHead>
-                                            <TableHead className='text-center'>Action</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {filteredHistory.map((item) => {
-                                            const transferIcon = getTransferTypeIcon(item);
-                                            const TransferIcon = transferIcon.icon;
-                                            
-                                            return (
-                                            <TableRow key={item.id}>
-                                                <TableCell className='pl-6 font-semibold text-slate-800'>
-                                                    <span className='inline-flex items-center gap-3'>
-                                                        <TransferIcon className={`h-4 w-4 ${transferIcon.className}`} />
-                                                        <span className='truncate max-w-[240px] sm:max-w-[320px]'>{item.fileName || 'Unknown'}</span>
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className='text-slate-500'>{formatTimeAgo(item.timestamp)}</TableCell>
-                                                <TableCell>
-                                                    <span className='inline-flex items-center gap-1.5'>
-                                                        <span className='text-sky-600 font-semibold'>{formatBytes(item.speedBytesPerSec)}/s</span>
-                                                        {item.direction === 'send' ? (
-                                                            <ArrowUp className='h-3.5 w-3.5 text-orange-500' />
-                                                        ) : (
-                                                            <ArrowDown className='h-3.5 w-3.5 text-sky-500' />
-                                                        )}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className='text-slate-500'>{formatBytes(item.totalBytes || item.fileSize)}</TableCell>
-                                                <TableCell className='text-slate-500'>{formatDownloads(item)}</TableCell>
-                                                <TableCell className='text-center'>
-                                                    {item.transferType === 'p2p' ? (
-                                                        <span className='text-slate-400'>-</span>
-                                                    ) : item.status === 'active' ? (
-                                                        <div className='inline-flex items-center gap-1'>
-                                                            <Button
-                                                                variant='ghost'
-                                                                size='sm'
-                                                                onClick={() => handleCopyShareCode(item.shareCode)}
-                                                                className='h-8 w-8 p-0 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                                                                title='Copy share code'
-                                                            >
-                                                                <Copy className='h-4 w-4' />
-                                                            </Button>
-                                                            <Button
-                                                                variant='ghost'
-                                                                size='sm'
-                                                                onClick={() => handleOpenQrModal(item)}
-                                                                className='h-8 w-8 p-0 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                                                                title='View QR code'
-                                                            >
-                                                                <QrCode className='h-4 w-4' />
-                                                            </Button>
-                                                            <Button
-                                                                variant='ghost'
-                                                                size='sm'
-                                                                onClick={() => handleTerminateShare(item.id)}
-                                                                disabled={terminatingShares.has(item.id)}
-                                                                className='h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10'
-                                                                title='Terminate share'
-                                                            >
-                                                                {terminatingShares.has(item.id) ? (
-                                                                    <Loader2 className='h-4 w-4 animate-spin' />
-                                                                ) : (
-                                                                    <X className='h-4 w-4' />
-                                                                )}
-                                                            </Button>
-                                                        </div>
-                                                    ) : "---"}
-                                                </TableCell>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className='pl-6'>Name</TableHead>
+                                                <TableHead>Time</TableHead>
+                                                <TableHead>Dur</TableHead>
+                                                <TableHead>Speed</TableHead>
+                                                <TableHead>Size</TableHead>
+                                                <TableHead>DL</TableHead>
+                                                <TableHead className='text-center'>Action</TableHead>
                                             </TableRow>
-                                        )})}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {filteredHistory.map((item) => {
+                                                const { icon: TransferIcon, className: iconClass } =
+                                                    getTransferTypeIcon(item);
+
+                                                return (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className='pl-6 font-semibold text-slate-800'>
+                                                            <span className='inline-flex items-center gap-3'>
+                                                                <TransferIcon
+                                                                    className={`h-4 w-4 shrink-0 ${iconClass}`}
+                                                                />
+                                                                <span className='truncate max-w-[240px] sm:max-w-[320px]'>
+                                                                    {item.fileName || 'Unknown'}
+                                                                </span>
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className='text-slate-500'>
+                                                            {formatTimeAgo(item.timestamp)}
+                                                        </TableCell>
+                                                        <TableCell className='text-slate-500'>
+                                                            {formatDuration(item.durationMs)}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <span className='inline-flex items-center gap-1.5'>
+                                                                <span className='text-sky-600 font-semibold'>
+                                                                    {formatBytes(item.speedBytesPerSec)}/s
+                                                                </span>
+                                                                {item.direction === 'send' ? (
+                                                                    <ArrowUp className='h-3.5 w-3.5 text-orange-500' />
+                                                                ) : (
+                                                                    <ArrowDown className='h-3.5 w-3.5 text-sky-500' />
+                                                                )}
+                                                            </span>
+                                                        </TableCell>
+                                                        <TableCell className='text-slate-500'>
+                                                            {formatBytes(item.totalBytes || item.fileSize)}
+                                                        </TableCell>
+                                                        <TableCell className='text-slate-500'>
+                                                            {formatDownloads(item)}
+                                                        </TableCell>
+                                                        <TableCell className='text-center'>
+                                                            {item.transferType === 'p2p' ? (
+                                                                <span className='text-slate-400'>—</span>
+                                                            ) : item.status === 'active' ? (
+                                                                <div className='inline-flex items-center gap-1'>
+                                                                    <Button
+                                                                        variant='ghost'
+                                                                        size='sm'
+                                                                        onClick={() => handleCopyShareCode(item.shareCode)}
+                                                                        className='h-8 w-8 p-0 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                                                        title='Copy share code'
+                                                                    >
+                                                                        <Copy className='h-4 w-4' />
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant='ghost'
+                                                                        size='sm'
+                                                                        onClick={() => handleOpenQrModal(item)}
+                                                                        className='h-8 w-8 p-0 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                                                        title='View QR code'
+                                                                    >
+                                                                        <QrCode className='h-4 w-4' />
+                                                                    </Button>
+                                                                    <Button
+                                                                        variant='ghost'
+                                                                        size='sm'
+                                                                        onClick={() => handleTerminateShare(item.id)}
+                                                                        disabled={terminatingShares.has(item.id)}
+                                                                        className='h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10'
+                                                                        title='Terminate share'
+                                                                    >
+                                                                        {terminatingShares.has(item.id) ? (
+                                                                            <Loader2 className='h-4 w-4 animate-spin' />
+                                                                        ) : (
+                                                                            <X className='h-4 w-4' />
+                                                                        )}
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                <span className='text-slate-400'>—</span>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
                                 </div>
 
-                                <div className='p-4 border-t flex items-center justify-center'>
-                                    {loadingInitial ? (
-                                        <div className='flex items-center gap-2 text-sm text-muted-foreground'>
-                                            <Loader2 className='h-4 w-4 animate-spin' />
-                                            Loading history...
-                                        </div>
-                                    ) : (
-                                        <p className='text-sm text-muted-foreground'>
-                                            Showing {filteredHistory.length} of {history.length} transfers
-                                        </p>
-                                    )}
+                                <div className='p-4 border-t bg-white flex items-center justify-center'>
+                                    <p className='text-sm text-muted-foreground'>
+                                        Showing {filteredHistory.length} of {history.length} transfers
+                                    </p>
                                 </div>
                             </>
                         )}
@@ -732,6 +767,7 @@ const History = () => {
                 </div>
             </div>
 
+            {/* QR modal */}
             <Dialog
                 open={qrShare.open}
                 onOpenChange={(open) => setQrShare((prev) => ({ ...prev, open }))}
@@ -751,10 +787,7 @@ const History = () => {
                             <p className='text-xs text-muted-foreground'>Scan to open receive page</p>
                         </div>
                         <div className='flex justify-end'>
-                            <Button
-                                variant='outline'
-                                onClick={() => handleCopyShareCode(qrShare.code)}
-                            >
+                            <Button variant='outline' onClick={() => handleCopyShareCode(qrShare.code)}>
                                 <Copy className='h-4 w-4 mr-2' />
                                 Copy Code
                             </Button>
