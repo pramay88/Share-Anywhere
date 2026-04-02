@@ -103,23 +103,23 @@ const Auth = () => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-3">
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3">
             {isSignUp ? "Create Account" : "Welcome Back"}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground px-4">
             {isSignUp
               ? "Sign up to start sharing files securely"
               : "Sign in to access your file transfers"}
           </p>
         </div>
 
-        <Card className="p-8 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
-          <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
+        <Card className="p-5 sm:p-6 md:p-8 shadow-card bg-gradient-card backdrop-blur-sm border-border/50">
+          <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-3 sm:space-y-4">
             {isSignUp && (
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  <User className="inline h-4 w-4 mr-2" />
+                <label className="block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2">
+                  <User className="inline h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                   Display Name (Optional)
                 </label>
                 <Input
@@ -128,13 +128,14 @@ const Auth = () => {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   disabled={loading}
+                  className="h-10 sm:h-11"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">
-                <Mail className="inline h-4 w-4 mr-2" />
+              <label className="block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2">
+                <Mail className="inline h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                 Email
               </label>
               <Input
@@ -144,12 +145,13 @@ const Auth = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
+                className="h-10 sm:h-11"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
-                <Lock className="inline h-4 w-4 mr-2" />
+              <label className="block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2">
+                <Lock className="inline h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                 Password
               </label>
               <Input
@@ -160,6 +162,7 @@ const Auth = () => {
                 required
                 disabled={loading}
                 minLength={isSignUp ? 8 : undefined}
+                className="h-10 sm:h-11"
               />
             </div>
 
@@ -167,11 +170,11 @@ const Auth = () => {
               type="submit"
               size="lg"
               disabled={loading}
-              className="w-full text-black bg-transparent border-2 border-gray-300 outline-black hover:opacity-90 shadow-glow"
+              className="w-full h-11 sm:h-12 text-sm sm:text-base text-black bg-transparent border-2 border-gray-300 outline-black hover:opacity-90 shadow-glow"
             >
               {loading ? (
                 <>
-                  <div className="animate-spin mr-2 h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                  <div className="animate-spin mr-2 h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent rounded-full" />
                   {isSignUp ? "Creating Account..." : "Signing In..."}
                 </>
               ) : (
@@ -180,12 +183,12 @@ const Auth = () => {
             </Button>
           </form>
 
-          <div className="mt-6">
+          <div className="mt-5 sm:mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <Separator />
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
+              <div className="relative flex justify-center text-[10px] sm:text-xs uppercase">
                 <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
               </div>
             </div>
@@ -196,9 +199,9 @@ const Auth = () => {
               size="lg"
               disabled={loading}
               onClick={handleGoogleSignIn}
-              className="w-full mt-4"
+              className="w-full mt-3 sm:mt-4 h-11 sm:h-12"
             >
-              <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
+              <svg className="mr-2 h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -216,14 +219,14 @@ const Auth = () => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Continue with Google
+              <span className="text-sm sm:text-base">Continue with Google</span>
             </Button>
           </div>
 
-          <div className="mt-6 text-center">
+          <div className="mt-5 sm:mt-6 text-center">
             <button
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
               disabled={loading}
             >
               {isSignUp
@@ -233,14 +236,14 @@ const Auth = () => {
           </div>
         </Card>
 
-        <div className="text-center mt-6">
+        <div className="text-center mt-4 sm:mt-6">
           <Button
             variant="ghost"
             onClick={() => navigate("/")}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground h-10"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
+            <span className="text-sm">Back to Home</span>
           </Button>
         </div>
       </div>

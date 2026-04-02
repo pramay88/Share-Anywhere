@@ -46,60 +46,60 @@ export const QuickReceive = ({ textContent, metadata, shareCode }: QuickReceiveP
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-center gap-2 pb-4 border-b">
-                <CheckCircle2 className="h-6 w-6 text-green-600" />
-                <span className="text-lg font-semibold">Text Received!</span>
+        <div className="space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-center gap-2 pb-3 sm:pb-4 border-b">
+                <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                <span className="text-base sm:text-lg font-semibold">Text Received!</span>
             </div>
 
-            <div className="rounded-lg border bg-card p-4">
-                <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-semibold text-sm">Shared Text</h3>
-                    <div className="text-xs text-muted-foreground flex gap-3">
+            <div className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-0 mb-2 sm:mb-3">
+                    <h3 className="font-semibold text-xs sm:text-sm">Shared Text</h3>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground flex gap-2 sm:gap-3">
                         <span>{stats.characters.toLocaleString()} chars</span>
                         <span>{stats.lines.toLocaleString()} lines</span>
                         <span>{formatTextSize(textContent)}</span>
                     </div>
                 </div>
 
-                <div className="bg-background rounded-md p-4 max-h-[400px] overflow-auto">
-                    <pre className="text-sm whitespace-pre-wrap break-words font-mono">
+                <div className="bg-background rounded-md p-3 sm:p-4 max-h-[250px] sm:max-h-[400px] overflow-auto">
+                    <pre className="text-xs sm:text-sm whitespace-pre-wrap break-words font-mono">
                         {textContent}
                     </pre>
                 </div>
 
                 {metadata?.language_hint && (
-                    <div className="mt-2 text-xs text-muted-foreground">
+                    <div className="mt-2 text-[10px] sm:text-xs text-muted-foreground">
                         Detected: {metadata.language_hint}
                     </div>
                 )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                     onClick={copyToClipboard}
-                    className="flex-1"
+                    className="flex-1 h-10 sm:h-11"
                     variant={copied ? "outline" : "default"}
                 >
                     {copied ? (
                         <>
-                            <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Copied!
+                            <CheckCircle2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="text-xs sm:text-sm">Copied!</span>
                         </>
                     ) : (
                         <>
-                            <Copy className="mr-2 h-4 w-4" />
-                            Copy to Clipboard
+                            <Copy className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="text-xs sm:text-sm">Copy to Clipboard</span>
                         </>
                     )}
                 </Button>
                 <Button
                     onClick={downloadAsFile}
                     variant="outline"
-                    className="flex-1"
+                    className="flex-1 h-10 sm:h-11"
                 >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download as .txt
+                    <Download className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span className="text-xs sm:text-sm">Download as .txt</span>
                 </Button>
             </div>
         </div>

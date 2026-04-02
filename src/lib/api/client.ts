@@ -1,4 +1,4 @@
-import { API_ENDPOINTS } from '@/lib/shared/constants';
+import { API_BASE_URL, API_ENDPOINTS } from '@/lib/shared/constants';
 import type {
     ApiResponse,
     CreateShareRequest,
@@ -19,6 +19,7 @@ interface RequestOptions {
     body?: any;
     headers?: Record<string, string>;
     authToken?: string;
+    silent?: boolean;
 }
 
 class ApiClient {
@@ -26,6 +27,24 @@ class ApiClient {
 
     constructor(baseUrl: string = '') {
         this.baseUrl = baseUrl;
+    }
+
+    /**
+     * Build a request URL while avoiding duplicated "/api" prefixes.
+     */
+    private buildRequestUrl(url: string): string {
+        const normalizedBase = (this.baseUrl || '').replace(/\/+$/, '');
+        const normalizedPath = url.startsWith('/') ? url : `/${url}`;
+
+        if (!normalizedBase) {
+            return normalizedPath;
+        }
+
+        if (normalizedBase.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+            return `${normalizedBase}${normalizedPath.slice(4)}`;
+        }
+
+        return `${normalizedBase}${normalizedPath}`;
     }
 
     /**
@@ -60,7 +79,7 @@ class ApiClient {
         };
 
         try {
-            const response = await fetch(`${this.baseUrl}${url}`, fetchOptions);
+            const response = await fetch(this.buildRequestUrl(url), fetchOptions);
 
             // Check if response is JSON
             const contentType = response.headers.get('content-type');
@@ -71,7 +90,9 @@ class ApiClient {
                 try {
                     data = await response.json();
                 } catch (parseError) {
-                    console.error('Failed to parse JSON response:', parseError);
+                    if (!options.silent) {
+                        console.error('Failed to parse JSON response:', parseError);
+                    }
                     return {
                         success: false,
                         error: {
@@ -83,7 +104,9 @@ class ApiClient {
             } else {
                 // Not JSON - likely HTML error page
                 const text = await response.text();
-                console.error('Non-JSON response received:', text.substring(0, 200));
+                if (!options.silent) {
+                    console.error('Non-JSON response received:', text.substring(0, 200));
+                }
                 return {
                     success: false,
                     error: {
@@ -105,7 +128,9 @@ class ApiClient {
 
             return data;
         } catch (error: any) {
-            console.error('API request failed:', error);
+            if (!options.silent) {
+                console.error('API request failed:', error);
+            }
             return {
                 success: false,
                 error: {
@@ -206,8 +231,22 @@ class ApiClient {
     /**
      * Get user's share history (last 24 hours)
      */
-    async getUserHistory(userId: string): Promise<ApiResponse<any>> {
-        return this.request(`/api/user/${userId}/history`, {
+    async getUserHistory(userId: string, params?: Record<string, string | number | undefined>): Promise<ApiResponse<any>> {
+        const searchParams = new URLSearchParams();
+        if (params) {
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    searchParams.set(key, String(value));
+                }
+            });
+        }
+
+        const query = searchParams.toString();
+        const url = query
+            ? `${API_ENDPOINTS.USER.HISTORY(userId)}?${query}`
+            : API_ENDPOINTS.USER.HISTORY(userId);
+
+        return this.request(url, {
             method: 'GET',
         });
     }
@@ -216,7 +255,65 @@ class ApiClient {
      * Get user statistics
      */
     async getUserStats(userId: string): Promise<ApiResponse<any>> {
-        return this.request(`/api/user/${userId}/stats`, {
+        return this.request(API_ENDPOINTS.USER.STATS(userId), {
+            method: 'GET',
+        });
+    }
+
+    /**
+     * Get active internet shares for a user
+     */
+    async getActiveShares(userId: string): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.ACTIVE_SHARES(userId), {
+            method: 'GET',
+        });
+    }
+
+    /**
+     * Stop/delete an active share
+     */
+    async stopActiveShare(userId: string, shareCode: string): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.STOP_SHARE(userId, shareCode), {
+            method: 'DELETE',
+        });
+    }
+
+    /**
+     * Terminate an active share by ID
+     */
+    async terminateShare(userId: string, shareId: string): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.TERMINATE_SHARE(userId, shareId), {
+            method: 'POST',
+        });
+    }
+
+    /**
+     * Track transfer analytics/history event
+     */
+    async trackTransferEvent(userId: string, event: Record<string, any>): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.TRACK_EVENT(userId), {
+            method: 'POST',
+            body: event,
+            silent: true,
+        });
+    }
+
+    /**
+     * Track transfer event without user identity (guest mode)
+     */
+    async trackAnonymousTransferEvent(event: Record<string, any>): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.TRACK_EVENT_ANON, {
+            method: 'POST',
+            body: event,
+            silent: true,
+        });
+    }
+
+    /**
+     * Get global admin analytics summary
+     */
+    async getAdminAnalyticsSummary(): Promise<ApiResponse<any>> {
+        return this.request(API_ENDPOINTS.USER.ADMIN_ANALYTICS, {
             method: 'GET',
         });
     }
@@ -232,7 +329,7 @@ class ApiClient {
 }
 
 // Export singleton instance with backend URL
-export const apiClient = new ApiClient(import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001');
+export const apiClient = new ApiClient(API_BASE_URL);
 
 // Export class for testing
 export { ApiClient };

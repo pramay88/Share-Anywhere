@@ -17,57 +17,80 @@ export async function cleanupExpiredShares() {
 
         console.log('🧹 Starting cleanup of expired shares...');
 
-        // Query expired shares
+        // Query expired shares (only those not already marked as deleted/cancelled)
         const expiredSnapshot = await db
             .collection('shares')
             .where('expiresAt', '<', now)
-            .where('status', '!=', 'deleted')
             .limit(100) // Process in batches
             .get();
 
         if (expiredSnapshot.empty) {
             console.log('✅ No expired shares to clean up');
-            return { deleted: 0, failed: 0 };
+            return { deleted: 0, failed: 0, cloudinaryDeleted: 0, cloudinaryFailed: 0 };
         }
 
-        const sharesToDelete = [];
+        const sharesToProcess = [];
         const cloudinaryPublicIds = [];
 
         expiredSnapshot.forEach((doc) => {
             const data = doc.data();
-            sharesToDelete.push(doc.id);
+            const status = String(data.status || '').toLowerCase();
+            
+            // Skip if already deleted/cancelled/expired
+            if (['deleted', 'cancelled', 'expired'].includes(status)) {
+                return;
+            }
+
+            sharesToProcess.push({
+                id: doc.id,
+                contentType: data.contentType || data.content_type,
+                cloudinaryPublicId: data.cloudinaryPublicId,
+            });
 
             // Collect Cloudinary public IDs for file shares
-            if (data.contentType === 'file' && data.cloudinaryPublicId) {
+            if (data.cloudinaryPublicId) {
                 cloudinaryPublicIds.push(data.cloudinaryPublicId);
             }
         });
 
-        console.log(`📋 Found ${sharesToDelete.length} expired shares`);
+        if (sharesToProcess.length === 0) {
+            console.log('✅ No shares need cleanup (all already processed)');
+            return { deleted: 0, failed: 0, cloudinaryDeleted: 0, cloudinaryFailed: 0 };
+        }
 
-        // Delete files from Cloudinary
+        console.log(`📋 Found ${sharesToProcess.length} expired shares to clean up`);
+
+        // Delete files from Cloudinary (non-blocking, best-effort)
         let cloudinaryResults = { successful: 0, failed: 0 };
         if (cloudinaryPublicIds.length > 0) {
             console.log(`🗑️  Deleting ${cloudinaryPublicIds.length} files from Cloudinary...`);
-            cloudinaryResults = await deleteFiles(cloudinaryPublicIds);
+            try {
+                cloudinaryResults = await deleteFiles(cloudinaryPublicIds);
+            } catch (cloudinaryError) {
+                console.error('⚠️  Cloudinary deletion had errors:', cloudinaryError.message);
+                // Continue with Firestore updates even if Cloudinary fails
+            }
         }
 
-        // Delete from Firestore (mark as deleted, don't actually delete)
+        // Update Firestore (mark as expired, clear Cloudinary references)
         const batch = db.batch();
-        sharesToDelete.forEach((shareCode) => {
-            const docRef = db.collection('shares').doc(shareCode);
+        sharesToProcess.forEach((share) => {
+            const docRef = db.collection('shares').doc(share.id);
             batch.update(docRef, {
-                status: 'deleted',
-                deletedAt: new Date(),
+                status: 'expired',
+                cloudinaryPublicId: null,
+                cloudinaryUrl: null,
+                deletedAt: now,
+                updatedAt: now,
             });
         });
 
         await batch.commit();
 
-        console.log(`✅ Cleanup complete: ${sharesToDelete.length} shares marked as deleted`);
+        console.log(`✅ Cleanup complete: ${sharesToProcess.length} shares marked as expired`);
 
         return {
-            deleted: sharesToDelete.length,
+            deleted: sharesToProcess.length,
             cloudinaryDeleted: cloudinaryResults.successful,
             cloudinaryFailed: cloudinaryResults.failed,
         };

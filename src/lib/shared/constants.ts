@@ -1,5 +1,50 @@
 // Shared constants used across frontend and backend
 
+// Firestore Collection Names
+export const COLLECTIONS = {
+    SHARES: 'shares',           // Primary collection for internet file/text shares
+    TRANSFERS: 'transfers',     // Legacy collection (client-side writes)
+    HISTORY: 'history',         // P2P completed transfer history
+    ACTIVE_SHARES: 'active_shares',  // Real-time transfer tracking
+    DOWNLOAD_LOGS: 'download_logs',  // Download audit trail (optional)
+    ANALYTICS: 'analytics',     // Global aggregated metrics
+    ANALYTICS_USERS: 'analytics_users',  // Per-user metrics
+    USER_STATS: 'userStats',    // User profile stats
+    P2P_SESSIONS: 'p2p_sessions', // P2P signaling sessions
+} as const;
+
+// Transfer Status Values
+export const TRANSFER_STATUS = {
+    PENDING: 'pending',     // Upload in progress
+    READY: 'ready',         // Ready for download
+    ACTIVE: 'active',       // Currently being shared
+    EXPIRED: 'expired',     // Past expiration time
+    DELETED: 'deleted',     // User-deleted or cleanup
+    CANCELLED: 'cancelled', // User-terminated
+    SUCCESS: 'success',     // Completed successfully (P2P)
+    FAILED: 'failed',       // Transfer failed
+} as const;
+
+// Content Types
+export const CONTENT_TYPES = {
+    FILE: 'file',
+    TEXT: 'text',
+    URL: 'url',
+} as const;
+
+// Transfer Types
+export const TRANSFER_TYPES = {
+    INTERNET: 'internet',
+    P2P: 'p2p',
+} as const;
+
+// Expiration Constants
+export const EXPIRATION = {
+    DEFAULT_HOURS: 24,
+    MAX_HOURS: 24,           // Maximum 24 hours for free tier
+    CLEANUP_INTERVAL_MINUTES: 30,
+} as const;
+
 // API Endpoints
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -9,6 +54,16 @@ export const API_ENDPOINTS = {
         GET: (code: string) => `${API_BASE_URL}/shares/${code}`,
         CONSUME: (code: string) => `${API_BASE_URL}/shares/${code}/consume`,
         VALIDATE: (code: string) => `${API_BASE_URL}/shares/validate/${code}`,
+    },
+    USER: {
+        HISTORY: (userId: string) => `${API_BASE_URL}/user/${userId}/history`,
+        STATS: (userId: string) => `${API_BASE_URL}/user/${userId}/stats`,
+        ACTIVE_SHARES: (userId: string) => `${API_BASE_URL}/user/${userId}/active-shares`,
+        STOP_SHARE: (userId: string, shareCode: string) => `${API_BASE_URL}/user/${userId}/active-shares/${shareCode}`,
+        TERMINATE_SHARE: (userId: string, shareId: string) => `${API_BASE_URL}/user/${userId}/shares/${shareId}/terminate`,
+        TRACK_EVENT: (userId: string) => `${API_BASE_URL}/user/${userId}/analytics/event`,
+        TRACK_EVENT_ANON: `${API_BASE_URL}/user/analytics/event`,
+        ADMIN_ANALYTICS: `${API_BASE_URL}/user/admin/analytics/summary`,
     },
     QR: {
         GENERATE: `${API_BASE_URL}/qr/generate`,

@@ -4,6 +4,7 @@
  */
 
 import express from 'express';
+import { enqueueAnalyticsEvent } from '../services/analyticsQueue.js';
 
 const router = express.Router();
 
@@ -40,7 +41,8 @@ function generateCode() {
  */
 router.post('/create-session', (req, res) => {
     try {
-        const { peerId } = req.body;
+        const { peerId, userId, is_ephemeral } = req.body;
+        const isEphemeral = is_ephemeral === true || is_ephemeral === 'true';
 
         if (!peerId || typeof peerId !== 'string') {
             return res.status(400).json({
@@ -66,8 +68,22 @@ router.post('/create-session', (req, res) => {
         // Store session
         sessions.set(code, {
             peerId,
+            userId: userId || null,
+            is_ephemeral: isEphemeral,
             createdAt: Date.now(),
             receiverJoined: false,
+        });
+
+        enqueueAnalyticsEvent({
+            userId: userId || null,
+            shareCode: code,
+            transferType: 'p2p',
+            direction: 'send',
+            status: 'active',
+            retries: 0,
+            is_ephemeral: isEphemeral,
+            metadata: { source: 'p2p-create-session' },
+            clientTimestamp: new Date().toISOString(),
         });
 
         console.log(`🔗 P2P session created: ${code} → ${peerId}`);
@@ -117,6 +133,18 @@ router.get('/join/:code', (req, res) => {
 
         session.receiverJoined = true;
 
+        enqueueAnalyticsEvent({
+            userId: session.userId || null,
+            shareCode: upperCode,
+            transferType: 'p2p',
+            direction: 'receive',
+            status: 'active',
+            retries: 0,
+            is_ephemeral: session.is_ephemeral === true,
+            metadata: { source: 'p2p-join-session' },
+            clientTimestamp: new Date().toISOString(),
+        });
+
         console.log(`🤝 Receiver joined session: ${upperCode}`);
 
         res.json({
@@ -144,6 +172,19 @@ router.delete('/session/:code', (req, res) => {
         const upperCode = code.toUpperCase();
 
         const existed = sessions.delete(upperCode);
+
+        if (existed) {
+            enqueueAnalyticsEvent({
+                shareCode: upperCode,
+                transferType: 'p2p',
+                direction: 'send',
+                status: 'cancelled',
+                retries: 0,
+                is_ephemeral: false,
+                metadata: { source: 'p2p-delete-session' },
+                clientTimestamp: new Date().toISOString(),
+            });
+        }
 
         if (existed) {
             console.log(`🧹 P2P session cleaned up: ${upperCode}`);

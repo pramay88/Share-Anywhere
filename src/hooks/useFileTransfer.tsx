@@ -24,6 +24,26 @@ import {
 } from '@/integrations/firebase/firestore';
 import { uploadToCloudinary, getCloudinaryUrl } from '@/integrations/cloudinary/config';
 import { getCurrentUser } from '@/integrations/firebase/auth';
+import { apiClient } from '@/lib/api/client';
+
+function fireAndForgetTransferEvent(userId: string | null | undefined, event: Record<string, any>) {
+  const payload = {
+    ...event,
+    clientTimestamp: new Date().toISOString(),
+    is_ephemeral: event?.is_ephemeral === true,
+  };
+
+  if (userId) {
+    void apiClient.trackTransferEvent(userId, payload).catch(() => {
+      // Intentionally ignored to keep transfer path non-blocking.
+    });
+    return;
+  }
+
+  void apiClient.trackAnonymousTransferEvent(payload).catch(() => {
+    // Intentionally ignored to keep transfer path non-blocking.
+  });
+}
 
 export const useFileTransfer = () => {
   const [uploading, setUploading] = useState(false);
@@ -34,6 +54,7 @@ export const useFileTransfer = () => {
     customCode?: string,
     expiresInHours?: number
   ): Promise<{ shareCode: string; transferId: string } | null> => {
+    const startedAt = Date.now();
     try {
       // Check if offline
       if (isOffline()) {
@@ -188,8 +209,35 @@ export const useFileTransfer = () => {
       }
 
       toast.success(`Successfully uploaded ${totalFiles} file(s)!`);
+
+      const durationMs = Date.now() - startedAt;
+      const speedBytesPerSec = durationMs > 0 ? Math.round(totalSize / (durationMs / 1000)) : 0;
+      fireAndForgetTransferEvent(user?.uid, {
+        transferId,
+        shareCode,
+        transferType: 'internet',
+        direction: 'send',
+        status: 'success',
+        fileName: totalFiles === 1 ? files[0].name : `${totalFiles} files`,
+        fileType: totalFiles === 1 ? (files[0].type || 'application/octet-stream') : 'application/octet-stream',
+        fileSize: totalSize,
+        totalBytes: totalSize,
+        durationMs,
+        speedBytesPerSec,
+        retries: 0,
+      });
+
       return { shareCode, transferId };
     } catch (error: any) {
+      const user = getCurrentUser();
+      fireAndForgetTransferEvent(user?.uid, {
+        transferType: 'internet',
+        direction: 'send',
+        status: 'failed',
+        error: error?.message || 'Upload failed',
+        durationMs: Date.now() - startedAt,
+      });
+
       logError(error, 'uploadFiles');
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
@@ -205,6 +253,7 @@ export const useFileTransfer = () => {
     customCode?: string,
     expiresInHours?: number
   ): Promise<{ shareCode: string; transferId: string } | null> => {
+    const startedAt = Date.now();
     try {
       // Check if offline
       if (isOffline()) {
@@ -323,8 +372,37 @@ export const useFileTransfer = () => {
 
       setUploadProgress(100);
       toast.success('Text shared successfully!');
+
+      const durationMs = Date.now() - startedAt;
+      const totalBytes = new TextEncoder().encode(text).length;
+      const speedBytesPerSec = durationMs > 0 ? Math.round(totalBytes / (durationMs / 1000)) : 0;
+
+      fireAndForgetTransferEvent(user?.uid, {
+        transferId,
+        shareCode,
+        transferType: 'internet',
+        direction: 'send',
+        status: 'success',
+        fileName: 'Text snippet',
+        fileType: 'text/plain',
+        fileSize: totalBytes,
+        totalBytes,
+        durationMs,
+        speedBytesPerSec,
+        retries: 0,
+      });
+
       return { shareCode, transferId };
     } catch (error: any) {
+      const user = getCurrentUser();
+      fireAndForgetTransferEvent(user?.uid, {
+        transferType: 'internet',
+        direction: 'send',
+        status: 'failed',
+        error: error?.message || 'Text upload failed',
+        durationMs: Date.now() - startedAt,
+      });
+
       logError(error, 'uploadText');
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
@@ -386,6 +464,7 @@ export const useFileTransfer = () => {
     cloudinaryUrl: string,
     originalName: string
   ) => {
+    const startedAt = Date.now();
     try {
       // Check if offline
       if (isOffline()) {
@@ -446,7 +525,33 @@ export const useFileTransfer = () => {
       URL.revokeObjectURL(url);
 
       toast.success(`Downloaded: ${originalName}`);
+
+      const user = getCurrentUser();
+      fireAndForgetTransferEvent(user?.uid, {
+        transferId,
+        transferType: 'internet',
+        direction: 'receive',
+        status: 'success',
+        fileName: originalName,
+        fileType: blob.type || 'application/octet-stream',
+        fileSize: blob.size,
+        totalBytes: blob.size,
+        durationMs: Date.now() - startedAt,
+        speedBytesPerSec: 0,
+        retries: 0,
+      });
     } catch (error: any) {
+      const user = getCurrentUser();
+      fireAndForgetTransferEvent(user?.uid, {
+        transferId,
+        transferType: 'internet',
+        direction: 'receive',
+        status: 'failed',
+        fileName: originalName,
+        error: error?.message || 'Download failed',
+        durationMs: Date.now() - startedAt,
+      });
+
       logError(error, 'downloadFile');
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
