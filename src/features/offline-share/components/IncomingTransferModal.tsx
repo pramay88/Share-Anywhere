@@ -39,19 +39,19 @@ export function IncomingTransferModal({
 
     return (
         <AlertDialog open={isOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md mx-4 sm:mx-auto">
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Incoming File</AlertDialogTitle>
-                    <AlertDialogDescription>
+                    <AlertDialogTitle className="text-base sm:text-lg">Incoming File</AlertDialogTitle>
+                    <AlertDialogDescription className="text-xs sm:text-sm">
                         <span className="font-semibold">{senderName}</span> wants to send you a file.
                         {fileName && (
                             <>
                                 <br />
                                 <br />
                                 <div className="space-y-1">
-                                    <div className="font-medium text-foreground">{fileName}</div>
+                                    <div className="font-medium text-foreground text-xs sm:text-sm truncate">{fileName}</div>
                                     {fileSize !== undefined && (
-                                        <div className="text-sm text-muted-foreground">{formatFileSize(fileSize)}</div>
+                                        <div className="text-[10px] sm:text-sm text-muted-foreground">{formatFileSize(fileSize)}</div>
                                     )}
                                 </div>
                                 <br />
@@ -60,9 +60,9 @@ export function IncomingTransferModal({
                         Do you want to accept this transfer?
                     </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={onDecline}>Decline</AlertDialogCancel>
-                    <AlertDialogAction onClick={onAccept}>Accept</AlertDialogAction>
+                <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+                    <AlertDialogCancel onClick={onDecline} className="w-full sm:w-auto h-10 sm:h-11 text-xs sm:text-sm">Decline</AlertDialogCancel>
+                    <AlertDialogAction onClick={onAccept} className="w-full sm:w-auto h-10 sm:h-11 text-xs sm:text-sm">Accept</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

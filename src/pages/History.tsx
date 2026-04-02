@@ -4,6 +4,11 @@ import { Header } from '@/components/Header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import {
     Dialog,
     DialogContent,
     DialogHeader,
@@ -23,6 +28,7 @@ import { toast } from 'sonner';
 import {
     ArrowDown,
     ArrowUp,
+    AlertCircle,
     Globe,
     Loader2,
     Play,
@@ -31,6 +37,8 @@ import {
     X,
     Copy,
     QrCode,
+    SlidersHorizontal,
+    ChevronDown,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { QRCodeSVG } from 'qrcode.react';
@@ -133,6 +141,15 @@ const History = () => {
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'failed' | 'success' | 'cancelled'>('all');
     const [timeFilter, setTimeFilter] = useState<'all' | '24h' | '7d' | '30d'>('all');
 
+    const activeFilterCount = useMemo(() => {
+        let count = 0;
+        if (directionFilter !== 'all') count++;
+        if (statusFilter !== 'all') count++;
+        if (modeFilter !== 'all') count++;
+        if (timeFilter !== 'all') count++;
+        return count;
+    }, [directionFilter, statusFilter, modeFilter, timeFilter]);
+
     const [qrShare, setQrShare] = useState<QrShareState>({
         open: false,
         code: '',
@@ -162,6 +179,10 @@ const History = () => {
         // P2P is always 1-to-1
         if (item.transferType === 'p2p') return '1';
         return String(item.downloadsCount ?? '-');
+    }, []);
+
+    const getSpeedColorClass = useCallback((direction: HistoryRecord['direction']) => {
+        return direction === 'send' ? 'text-orange-500' : 'text-sky-500';
     }, []);
 
     // ─── Icon + color logic ───────────────────────────────────────────────────
@@ -344,6 +365,13 @@ const History = () => {
         await loadInitialData();
     };
 
+    const resetFilters = useCallback(() => {
+        setDirectionFilter('all');
+        setModeFilter('all');
+        setStatusFilter('all');
+        setTimeFilter('all');
+    }, []);
+
     // ─── Filters ──────────────────────────────────────────────────────────────
 
     const handleFilterChange = useCallback((key: string, value: string) => {
@@ -446,20 +474,20 @@ const History = () => {
         <div className='min-h-screen flex flex-col bg-slate-100/70'>
             <Header />
 
-            <div className='flex-1 p-4 sm:p-6 lg:p-10'>
-                <div className='max-w-7xl mx-auto space-y-5'>
+            <div className='flex-1 p-3 sm:p-4 md:p-6 lg:p-10'>
+                <div className='max-w-7xl mx-auto space-y-4 sm:space-y-5'>
                     {/* Header row */}
-                    <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                    <div className='flex flex-col gap-2 sm:gap-3 sm:flex-row sm:items-center sm:justify-between'>
                         <div>
-                            <h1 className='text-3xl font-bold tracking-tight text-slate-900'>
+                            <h1 className='text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-slate-900'>
                                 Transfer History
                             </h1>
-                            <p className='text-slate-500 mt-1'>Monitor your file sharing activity</p>
+                            <p className='text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1'>Monitor your file sharing activity</p>
                         </div>
                         <Button
                             variant='outline'
                             size='sm'
-                            className='w-full sm:w-auto rounded-xl bg-white'
+                            className='w-full sm:w-auto rounded-xl bg-white h-9 sm:h-10'
                             onClick={handleRefresh}
                             disabled={refreshing}
                         >
@@ -491,98 +519,202 @@ const History = () => {
                         </Card>
                     )}
 
-                    {/* Stats bar - compact inline */}
-                    <div className='flex items-center gap-6 px-5 py-3 bg-white rounded-xl border border-slate-200/70 shadow-sm'>
-                        <div className='flex items-center gap-2'>
-                            <Play className='h-3 w-3 text-violet-500 fill-violet-500' />
-                            <span className='text-xs font-medium text-slate-500 uppercase tracking-wide'>Transfers</span>
-                            <span className='text-sm font-bold text-slate-900'>{stats.totalSends + stats.totalReceives}</span>
+                    {/* Stats bar - compact inline - scrollable on mobile */}
+                    <div className='flex items-center gap-3 sm:gap-6 px-3 sm:px-5 py-2.5 sm:py-3 bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-x-auto'>
+                        <div className='flex items-center gap-1.5 sm:gap-2 shrink-0'>
+                            <Play className='h-2.5 w-2.5 sm:h-3 sm:w-3 text-violet-500 fill-violet-500' />
+                            <span className='text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide'>Transfers</span>
+                            <span className='text-xs sm:text-sm font-bold text-slate-900'>{stats.totalSends + stats.totalReceives}</span>
                         </div>
-                        <div className='h-4 w-px bg-slate-200' />
-                        <div className='flex items-center gap-2'>
-                            <Play className='h-3 w-3 text-sky-500 fill-sky-500' />
-                            <span className='text-xs font-medium text-slate-500 uppercase tracking-wide'>Data</span>
-                            <span className='text-sm font-bold text-slate-900'>{formatBytes(stats.totalDataShared)}</span>
+                        <div className='h-3 sm:h-4 w-px bg-slate-200 shrink-0' />
+                        <div className='flex items-center gap-1.5 sm:gap-2 shrink-0'>
+                            <Play className='h-2.5 w-2.5 sm:h-3 sm:w-3 text-sky-500 fill-sky-500' />
+                            <span className='text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide'>Data</span>
+                            <span className='text-xs sm:text-sm font-bold text-slate-900'>{formatBytes(stats.totalDataShared)}</span>
                         </div>
-                        <div className='h-4 w-px bg-slate-200' />
-                        <div className='flex items-center gap-2'>
-                            <Play className='h-3 w-3 text-emerald-500 fill-emerald-500' />
-                            <span className='text-xs font-medium text-slate-500 uppercase tracking-wide'>Avg</span>
-                            <span className='text-sm font-bold text-slate-900'>{formatBytes(stats.averageSpeedBytesPerSec)}/s</span>
+                        <div className='h-3 sm:h-4 w-px bg-slate-200 shrink-0' />
+                        <div className='flex items-center gap-1.5 sm:gap-2 shrink-0'>
+                            <Play className='h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-500 fill-emerald-500' />
+                            <span className='text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide'>Avg</span>
+                            <span className='text-xs sm:text-sm font-bold text-slate-900'>{formatBytes(stats.averageSpeedBytesPerSec)}/s</span>
                         </div>
                     </div>
 
                     {/* Table card */}
-                    <Card className='rounded-2xl border-slate-200/70 shadow-sm overflow-hidden'>
+                    <Card className='rounded-xl sm:rounded-2xl border-slate-200/70 shadow-sm overflow-hidden'>
                         {/* Filters */}
-                        <div className='p-4 sm:p-5 border-b bg-white'>
-                            <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3'>
-                                <select
-                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                    value={directionFilter}
-                                    onChange={(e) => handleFilterChange('direction', e.target.value)}
-                                >
-                                    <option value='all'>All activity</option>
-                                    <option value='send'>Sent</option>
-                                    <option value='receive'>Received</option>
-                                </select>
+                        <div className='p-3 sm:p-4 md:p-5 border-b bg-white flex justify-end'>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant='outline'
+                                        className='h-9 sm:h-10 rounded-lg sm:rounded-xl border-slate-200 text-slate-700 hover:text-slate-900 text-xs sm:text-sm'
+                                    >
+                                        <SlidersHorizontal className='mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4' />
+                                        Filters
+                                        {activeFilterCount > 0 && (
+                                            <span className='ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[10px] font-semibold text-white'>
+                                                {activeFilterCount}
+                                            </span>
+                                        )}
+                                        <ChevronDown className='ml-1.5 h-3.5 w-3.5 opacity-70' />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align='end' className='w-[min(92vw,24rem)] p-4 sm:p-5'>
+                                    <div className='space-y-4'>
+                                        <div className='grid gap-3 sm:grid-cols-2'>
+                                            <label className='space-y-1.5 text-xs font-medium text-slate-600'>
+                                                <span>Activity</span>
+                                                <select
+                                                    className='h-9 sm:h-10 w-full rounded-lg border border-slate-200 bg-white px-2 sm:px-3 text-xs sm:text-sm text-slate-700'
+                                                    value={directionFilter}
+                                                    onChange={(e) => handleFilterChange('direction', e.target.value)}
+                                                >
+                                                    <option value='all'>All activity</option>
+                                                    <option value='send'>Sent</option>
+                                                    <option value='receive'>Received</option>
+                                                </select>
+                                            </label>
 
-                                <select
-                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                    value={statusFilter}
-                                    onChange={(e) => handleFilterChange('status', e.target.value)}
-                                >
-                                    <option value='all'>All statuses</option>
-                                    <option value='active'>Active</option>
-                                    <option value='success'>Success</option>
-                                    <option value='failed'>Failed</option>
-                                    <option value='cancelled'>Cancelled</option>
-                                </select>
+                                            <label className='space-y-1.5 text-xs font-medium text-slate-600'>
+                                                <span>Status</span>
+                                                <select
+                                                    className='h-9 sm:h-10 w-full rounded-lg border border-slate-200 bg-white px-2 sm:px-3 text-xs sm:text-sm text-slate-700'
+                                                    value={statusFilter}
+                                                    onChange={(e) => handleFilterChange('status', e.target.value)}
+                                                >
+                                                    <option value='all'>All statuses</option>
+                                                    <option value='active'>Active</option>
+                                                    <option value='success'>Success</option>
+                                                    <option value='failed'>Failed</option>
+                                                    <option value='cancelled'>Cancelled</option>
+                                                </select>
+                                            </label>
 
-                                <select
-                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                    value={modeFilter}
-                                    onChange={(e) => handleFilterChange('mode', e.target.value)}
-                                >
-                                    <option value='all'>All modes</option>
-                                    <option value='internet'>Internet</option>
-                                    <option value='p2p'>P2P</option>
-                                </select>
+                                            <label className='space-y-1.5 text-xs font-medium text-slate-600'>
+                                                <span>Mode</span>
+                                                <select
+                                                    className='h-9 sm:h-10 w-full rounded-lg border border-slate-200 bg-white px-2 sm:px-3 text-xs sm:text-sm text-slate-700'
+                                                    value={modeFilter}
+                                                    onChange={(e) => handleFilterChange('mode', e.target.value)}
+                                                >
+                                                    <option value='all'>All modes</option>
+                                                    <option value='internet'>Internet</option>
+                                                    <option value='p2p'>P2P</option>
+                                                </select>
+                                            </label>
 
-                                <select
-                                    className='h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700'
-                                    value={timeFilter}
-                                    onChange={(e) => handleFilterChange('time', e.target.value)}
-                                >
-                                    <option value='all'>All time</option>
-                                    <option value='24h'>Last 24 hours</option>
-                                    <option value='7d'>Last 7 days</option>
-                                    <option value='30d'>Last 30 days</option>
-                                </select>
+                                            <label className='space-y-1.5 text-xs font-medium text-slate-600'>
+                                                <span>Time</span>
+                                                <select
+                                                    className='h-9 sm:h-10 w-full rounded-lg border border-slate-200 bg-white px-2 sm:px-3 text-xs sm:text-sm text-slate-700'
+                                                    value={timeFilter}
+                                                    onChange={(e) => handleFilterChange('time', e.target.value)}
+                                                >
+                                                    <option value='all'>All time</option>
+                                                    <option value='24h'>Last 24 hours</option>
+                                                    <option value='7d'>Last 7 days</option>
+                                                    <option value='30d'>Last 30 days</option>
+                                                </select>
+                                            </label>
+                                        </div>
 
-                                <Button
-                                    variant='ghost'
-                                    className='h-10 justify-start rounded-xl text-slate-600 hover:text-slate-800'
-                                    onClick={() => {
-                                        setDirectionFilter('all');
-                                        setModeFilter('all');
-                                        setStatusFilter('all');
-                                        setTimeFilter('all');
-                                    }}
-                                >
-                                    <RefreshCw className='mr-2 h-4 w-4' />
-                                    Reset Filters
-                                </Button>
-                            </div>
+                                        <div className='flex items-center justify-between gap-3 border-t border-slate-200 pt-3'>
+                                            <span className='text-xs text-slate-500'>
+                                                {activeFilterCount > 0 ? `${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active` : 'No filters applied'}
+                                            </span>
+                                            <Button
+                                                variant='ghost'
+                                                className='h-9 rounded-lg text-slate-600 hover:text-slate-800 text-xs sm:text-sm'
+                                                onClick={resetFilters}
+                                            >
+                                                <RefreshCw className='mr-1.5 h-3.5 w-3.5' />
+                                                Reset
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
 
                         {filteredHistory.length === 0 ? (
-                            <div className='p-10 text-center bg-white'>
-                                <p className='text-muted-foreground'>No transfers match your filters yet.</p>
+                            <div className='p-6 sm:p-10 text-center bg-white'>
+                                <p className='text-xs sm:text-sm text-muted-foreground'>No transfers match your filters yet.</p>
                             </div>
                         ) : (
                             <>
-                                <div className='overflow-x-auto bg-white'>
+                                {/* Mobile Card View */}
+                                <div className='md:hidden divide-y bg-white'>
+                                    {filteredHistory.map((item) => {
+                                        const { icon: TransferIcon, className: iconClass } = getTransferTypeIcon(item);
+                                        return (
+                                            <div key={item.id} className='p-3 space-y-2'>
+                                                <div className='flex items-start justify-between gap-2'>
+                                                    <div className='flex items-center gap-2 min-w-0 flex-1'>
+                                                        <TransferIcon className={`h-4 w-4 shrink-0 ${iconClass}`} />
+                                                        <span className='text-sm font-medium text-slate-800 truncate'>
+                                                            {item.fileName || 'Unknown'}
+                                                        </span>
+                                                    </div>
+                                                    <span className='text-[10px] text-slate-400 shrink-0'>
+                                                        {formatTimeAgo(item.timestamp)}
+                                                    </span>
+                                                </div>
+                                                <div className='flex items-center justify-between text-xs text-slate-500'>
+                                                    <div className='flex items-center gap-3'>
+                                                        <span>{formatBytes(item.totalBytes || item.fileSize)}</span>
+                                                        <span className='flex items-center gap-1'>
+                                                            <span className={`${getSpeedColorClass(item.direction)} font-medium`}>
+                                                                {formatBytes(item.speedBytesPerSec)}/s
+                                                            </span>
+                                                            {item.direction === 'send' ? (
+                                                                <ArrowUp className='h-3 w-3 text-orange-500' />
+                                                            ) : (
+                                                                <ArrowDown className='h-3 w-3 text-sky-500' />
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    {item.transferType !== 'p2p' && item.status === 'active' && (
+                                                        <div className='flex items-center gap-1'>
+                                                            <Button
+                                                                variant='ghost'
+                                                                size='sm'
+                                                                onClick={() => handleCopyShareCode(item.shareCode)}
+                                                                className='h-7 w-7 p-0'
+                                                            >
+                                                                <Copy className='h-3.5 w-3.5' />
+                                                            </Button>
+                                                            <Button
+                                                                variant='ghost'
+                                                                size='sm'
+                                                                onClick={() => handleOpenQrModal(item)}
+                                                                className='h-7 w-7 p-0'
+                                                            >
+                                                                <QrCode className='h-3.5 w-3.5' />
+                                                            </Button>
+                                                            <Button
+                                                                variant='ghost'
+                                                                size='sm'
+                                                                onClick={() => handleTerminateShare(item.id)}
+                                                                disabled={terminatingShares.has(item.id)}
+                                                                className='h-7 w-7 p-0 text-destructive'
+                                                            >
+                                                                {terminatingShares.has(item.id) ? (
+                                                                    <Loader2 className='h-3.5 w-3.5 animate-spin' />
+                                                                ) : (
+                                                                    <X className='h-3.5 w-3.5' />
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Desktop Table View */}
+                                <div className='hidden md:block overflow-x-auto bg-white'>
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
@@ -616,7 +748,7 @@ const History = () => {
                                                         </TableCell>
                                                         <TableCell>
                                                             <span className='inline-flex items-center gap-1.5'>
-                                                                <span className='text-sky-600 font-semibold'>
+                                                                <span className={`${getSpeedColorClass(item.direction)} font-semibold`}>
                                                                     {formatBytes(item.speedBytesPerSec)}/s
                                                                 </span>
                                                                 {item.direction === 'send' ? (
@@ -681,8 +813,8 @@ const History = () => {
                                     </Table>
                                 </div>
 
-                                <div className='p-4 border-t bg-white flex items-center justify-center'>
-                                    <p className='text-sm text-muted-foreground'>
+                                <div className='p-3 sm:p-4 border-t bg-white flex items-center justify-center'>
+                                    <p className='text-xs sm:text-sm text-muted-foreground'>
                                         Showing {filteredHistory.length} of {history.length} transfers
                                     </p>
                                 </div>

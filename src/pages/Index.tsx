@@ -19,23 +19,23 @@ const Index = () => {
       <Header />
 
       {/* Hero Section */}
-      <section className="flex-1 flex flex-col justify-center items-center text-center py-20 px-6">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <div className="space-y-4">
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight">
+      <section className="flex-1 flex flex-col justify-center items-center text-center py-12 sm:py-16 md:py-20 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+          <div className="space-y-3 sm:space-y-4">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight">
               Share Files & Text
             </h1>
 
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
               Transfer files or share text snippets with just a code or QR scan.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2 px-4 sm:px-0">
             <Button
               size="lg"
               onClick={() => navigate("/send")}
-              className="group"
+              className="group w-full sm:w-auto h-12 sm:h-11"
             >
               <Upload className="mr-2 h-4 w-4" />
               Send Files
@@ -45,6 +45,7 @@ const Index = () => {
               size="lg"
               variant="outline"
               onClick={() => navigate("/p2p")}
+              className="w-full sm:w-auto h-12 sm:h-11"
             >
               <Zap className="mr-2 h-4 w-4" />
               P2P
@@ -53,14 +54,15 @@ const Index = () => {
               size="lg"
               variant="outline"
               onClick={() => navigate("/receive")}
+              className="w-full sm:w-auto h-12 sm:h-11"
             >
               <Download className="mr-2 h-4 w-4" />
               Receive
             </Button>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto pt-12">
+          {/* Stats - hidden on mobile for cleaner look */}
+          <div className="hidden sm:grid grid-cols-3 gap-8 max-w-2xl mx-auto pt-12">
             <div className="text-center space-y-1">
               {/* <div className="text-3xl md:text-4xl font-bold">50MB</div> */}
               {/* <div className="text-sm text-muted-foreground">Max Size</div> */}
@@ -79,8 +81,8 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="py-6 px-6 border-t text-center">
-        <p className="text-sm text-muted-foreground">
+      <footer className="py-4 sm:py-6 px-4 sm:px-6 border-t text-center">
+        <p className="text-xs sm:text-sm text-muted-foreground">
           © {new Date().getFullYear()} ShareAnywhere
         </p>
       </footer>

@@ -118,28 +118,28 @@ export const QuickShareForm = () => {
             {uploading ? (
                 <div className="space-y-4">
                     <div className="text-center">
-                        <div className="animate-spin mx-auto mb-4 h-8 w-8 border-2 border-foreground border-t-transparent rounded-full" />
-                        <h3 className="text-lg font-semibold mb-2">Sharing Text...</h3>
+                        <div className="animate-spin mx-auto mb-4 h-7 w-7 sm:h-8 sm:w-8 border-2 border-foreground border-t-transparent rounded-full" />
+                        <h3 className="text-base sm:text-lg font-semibold mb-2">Sharing Text...</h3>
                         <Progress value={uploadProgress} className="w-full mb-2" />
-                        <p className="text-sm text-muted-foreground">{uploadProgress}% complete</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground">{uploadProgress}% complete</p>
                     </div>
                 </div>
             ) : !code ? (
                 <>
                     <div>
-                        <label className="block text-sm font-medium mb-2">
+                        <label className="block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2">
                             Text, Link, or Code
                         </label>
                         <Textarea
                             placeholder="Paste or type your text, link, or code here..."
                             value={text}
                             onChange={(e) => setText(e.target.value)}
-                            className="min-h-[200px] font-mono text-sm"
+                            className="min-h-[150px] sm:min-h-[200px] font-mono text-xs sm:text-sm"
                             disabled={uploading}
                         />
                         {textStats && (
-                            <div className="mt-2 text-xs text-muted-foreground flex gap-4">
-                                <span>{textStats.characters.toLocaleString()} characters</span>
+                            <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-muted-foreground flex flex-wrap gap-2 sm:gap-4">
+                                <span>{textStats.characters.toLocaleString()} chars</span>
                                 <span>{textStats.words.toLocaleString()} words</span>
                                 <span>{textStats.lines.toLocaleString()} lines</span>
                                 <span>{formatTextSize(text)}</span>
@@ -148,14 +148,14 @@ export const QuickShareForm = () => {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-2">
+                        <label className="block text-xs sm:text-sm font-medium mb-1.5 sm:mb-2">
                             Custom Code (Optional)
                         </label>
                         <Input
                             placeholder="Enter custom code (6+ characters)"
                             value={customCode}
                             onChange={(e) => setCustomCode(e.target.value.trim().toUpperCase())}
-                            className="text-center tracking-wider"
+                            className="text-center tracking-wider h-10 sm:h-11"
                             maxLength={20}
                         />
                     </div>
@@ -163,18 +163,18 @@ export const QuickShareForm = () => {
                     <Button
                         onClick={handleShare}
                         disabled={!text.trim() || uploading}
-                        className="w-full"
+                        className="w-full h-10 sm:h-11"
                         size="lg"
                     >
-                        <FileText className="mr-2 h-5 w-5" />
+                        <FileText className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
                         Share Text
                     </Button>
                 </>
             ) : (
                 <div className="space-y-4">
-                    <div className="bg-primary text-primary-foreground p-6 rounded-lg text-center">
-                        <p className="text-xs mb-2 opacity-90">Share Code</p>
-                        <div className="text-3xl font-bold tracking-wider mb-4">
+                    <div className="bg-primary text-primary-foreground p-4 sm:p-6 rounded-lg text-center">
+                        <p className="text-[10px] sm:text-xs mb-2 opacity-90">Share Code</p>
+                        <div className="text-2xl sm:text-3xl font-bold tracking-wider mb-3 sm:mb-4">
                             {code}
                         </div>
                         <div className="flex gap-2 justify-center flex-wrap">
@@ -182,33 +182,35 @@ export const QuickShareForm = () => {
                                 variant="secondary"
                                 size="sm"
                                 onClick={copyCode}
+                                className="h-8 sm:h-9 text-xs sm:text-sm"
                             >
-                                <Copy className="h-4 w-4 mr-2" />
+                                <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                                 Copy Code
                             </Button>
                             <Button
                                 variant="secondary"
                                 size="sm"
                                 onClick={copyLink}
+                                className="h-8 sm:h-9 text-xs sm:text-sm"
                             >
-                                <Copy className="h-4 w-4 mr-2" />
+                                <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                                 Copy Link
                             </Button>
                         </div>
                     </div>
 
-                    <div className="bg-card border rounded-lg p-6 flex flex-col items-center space-y-3">
-                        <QRCodeSVG id="text-share-qr-svg" value={shareUrl} size={180} level="H" />
-                        <p className="text-xs text-muted-foreground text-center">
+                    <div className="bg-card border rounded-lg p-4 sm:p-6 flex flex-col items-center space-y-2 sm:space-y-3">
+                        <QRCodeSVG id="text-share-qr-svg" value={shareUrl} size={140} level="H" className="sm:w-[180px] sm:h-[180px]" />
+                        <p className="text-[10px] sm:text-xs text-muted-foreground text-center">
                             Scan to view text
                         </p>
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={shareQR}
-                            className="w-full"
+                            className="w-full h-9 sm:h-10"
                         >
-                            <Share2 className="h-4 w-4 mr-2" />
+                            <Share2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                             Share QR Code
                         </Button>
                     </div>
@@ -221,6 +223,7 @@ export const QuickShareForm = () => {
                                 setCode("");
                                 setCustomCode("");
                             }}
+                            className="h-9 sm:h-10 text-xs sm:text-sm"
                         >
                             Share Different Text
                         </Button>

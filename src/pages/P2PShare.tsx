@@ -358,46 +358,47 @@ const P2PShare = () => {
         <div className="min-h-screen bg-background">
             <Header />
 
-            <div className="container mx-auto px-4 py-8 max-w-2xl">
+            <div className="container mx-auto px-4 py-6 sm:py-8 max-w-2xl">
                 {/* Page Header */}
-                <div className="flex items-center gap-4 mb-8">
+                <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => mode === 'choose' ? navigate('/') : reset()}
+                        className="h-9 w-9 shrink-0"
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
-                    <div className="flex-1">
-                        <h1 className="text-2xl font-bold">P2P Share</h1>
-                        <p className="text-sm text-muted-foreground">
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-xl sm:text-2xl font-bold">P2P Share</h1>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                             Direct peer-to-peer transfer • No size limits
                         </p>
                     </div>
-                    <Wifi className="h-5 w-5 text-primary" />
+                    <Wifi className="h-5 w-5 text-primary shrink-0" />
                 </div>
 
                 {/* ============================================================ */}
                 {/* MODE CHOOSER */}
                 {/* ============================================================ */}
                 {mode === 'choose' && (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
                         <Card
-                            className="p-8 text-center cursor-pointer hover:border-primary transition-colors"
+                            className="p-6 sm:p-8 text-center cursor-pointer hover:border-primary transition-colors"
                             onClick={() => setMode('send')}
                         >
-                            <Upload className="h-10 w-10 mx-auto mb-3 text-primary" />
-                            <h3 className="font-semibold text-lg">Send</h3>
-                            <p className="text-xs text-muted-foreground mt-1">Share files & folders</p>
+                            <Upload className="h-8 w-8 sm:h-10 sm:w-10 mx-auto mb-2 sm:mb-3 text-primary" />
+                            <h3 className="font-semibold text-base sm:text-lg">Send</h3>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Share files & folders</p>
                         </Card>
 
                         <Card
-                            className="p-8 text-center cursor-pointer hover:border-primary transition-colors"
+                            className="p-6 sm:p-8 text-center cursor-pointer hover:border-primary transition-colors"
                             onClick={() => setMode('receive')}
                         >
-                            <Download className="h-10 w-10 mx-auto mb-3 text-primary" />
-                            <h3 className="font-semibold text-lg">Receive</h3>
-                            <p className="text-xs text-muted-foreground mt-1">Enter a share code</p>
+                            <Download className="h-8 w-8 sm:h-10 sm:w-10 mx-auto mb-2 sm:mb-3 text-primary" />
+                            <h3 className="font-semibold text-base sm:text-lg">Receive</h3>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Enter a share code</p>
                         </Card>
                     </div>
                 )}
@@ -419,15 +420,15 @@ const P2PShare = () => {
                                     {...{ webkitdirectory: '', directory: '' } as any}
                                 />
 
-                                <Card className="p-6 border-dashed border-2 text-center">
+                                <Card className="p-4 sm:p-6 border-dashed border-2 text-center">
                                     <div className="space-y-3">
-                                        <Upload className="h-8 w-8 mx-auto text-muted-foreground" />
-                                        <p className="text-sm text-muted-foreground">Select files or folders to share</p>
+                                        <Upload className="h-7 w-7 sm:h-8 sm:w-8 mx-auto text-muted-foreground" />
+                                        <p className="text-xs sm:text-sm text-muted-foreground">Select files or folders to share</p>
                                         <div className="flex gap-2 justify-center">
-                                            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                                            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-9 sm:h-10">
                                                 <FileIcon className="h-4 w-4 mr-1" />Files
                                             </Button>
-                                            <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
+                                            <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()} className="h-9 sm:h-10">
                                                 <FolderUp className="h-4 w-4 mr-1" />Folder
                                             </Button>
                                         </div>
@@ -436,22 +437,24 @@ const P2PShare = () => {
 
                                 {selectedFiles.length > 0 && (
                                     <Card className="divide-y">
-                                        {selectedFiles.map((entry, idx) => (
-                                            <div key={idx} className="flex items-center justify-between px-4 py-2.5">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium truncate">{entry.relativePath}</p>
-                                                    <p className="text-xs text-muted-foreground">{formatBytes(entry.file.size)}</p>
+                                        <div className="max-h-48 overflow-y-auto divide-y">
+                                            {selectedFiles.map((entry, idx) => (
+                                                <div key={idx} className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs sm:text-sm font-medium truncate">{entry.relativePath}</p>
+                                                        <p className="text-[10px] sm:text-xs text-muted-foreground">{formatBytes(entry.file.size)}</p>
+                                                    </div>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeFile(idx)}>
+                                                        <X className="h-3.5 w-3.5" />
+                                                    </Button>
                                                 </div>
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeFile(idx)}>
-                                                    <X className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                        ))}
-                                        <div className="px-4 py-2.5 flex items-center justify-between bg-muted/50">
-                                            <span className="text-xs text-muted-foreground">
+                                            ))}
+                                        </div>
+                                        <div className="px-3 sm:px-4 py-2.5 flex items-center justify-between bg-muted/50 gap-2">
+                                            <span className="text-[10px] sm:text-xs text-muted-foreground">
                                                 {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} • {formatBytes(totalSize)}
                                             </span>
-                                            <Button size="sm" onClick={startSharing} disabled={selectedFiles.length === 0}>
+                                            <Button size="sm" onClick={startSharing} disabled={selectedFiles.length === 0} className="h-8 sm:h-9">
                                                 Start Sharing
                                             </Button>
                                         </div>
@@ -462,32 +465,32 @@ const P2PShare = () => {
 
                         {/* Waiting for receiver */}
                         {transferState === 'sharing' && shareCode && !connection && (
-                            <Card className="p-6 text-center space-y-4">
-                                <p className="text-sm text-muted-foreground">Share this code with the receiver</p>
-                                <div className="flex justify-center gap-1.5">
+                            <Card className="p-4 sm:p-6 text-center space-y-4">
+                                <p className="text-xs sm:text-sm text-muted-foreground">Share this code with the receiver</p>
+                                <div className="flex justify-center gap-1 sm:gap-1.5">
                                     {shareCode.split('').map((char, i) => (
-                                        <div key={i} className="w-11 h-14 bg-muted rounded-lg flex items-center justify-center text-2xl font-bold font-mono">
+                                        <div key={i} className="w-9 h-11 sm:w-11 sm:h-14 bg-muted rounded-lg flex items-center justify-center text-xl sm:text-2xl font-bold font-mono">
                                             {char}
                                         </div>
                                     ))}
                                 </div>
-                                <Button variant="outline" size="sm" onClick={copyCode} className="gap-1.5">
+                                <Button variant="outline" size="sm" onClick={copyCode} className="gap-1.5 h-9">
                                     {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                     {copied ? 'Copied!' : 'Copy Code'}
                                 </Button>
                                 {p2pJoinUrl && (
                                     <div className="pt-2">
-                                        <p className="text-xs text-muted-foreground mb-2">Or scan QR to join instantly</p>
+                                        <p className="text-[10px] sm:text-xs text-muted-foreground mb-2">Or scan QR to join instantly</p>
                                         <div className="inline-flex bg-white p-2 rounded-lg border shadow-sm">
-                                            <QRCodeSVG value={p2pJoinUrl} size={132} level="M" />
+                                            <QRCodeSVG value={p2pJoinUrl} size={100} level="M" className="sm:w-[132px] sm:h-[132px]" />
                                         </div>
                                     </div>
                                 )}
-                                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                <div className="flex items-center justify-center gap-2 text-xs sm:text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     <span>Waiting for receiver to connect...</span>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-[10px] sm:text-xs text-muted-foreground">
                                     {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} • {formatBytes(totalSize)}
                                 </p>
                             </Card>
@@ -495,26 +498,26 @@ const P2PShare = () => {
 
                         {/* Transferring */}
                         {transferState === 'transferring' && (
-                            <Card className="p-6 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium text-sm">Sending files...</p>
+                            <Card className="p-4 sm:p-6 space-y-4">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium text-xs sm:text-sm">Sending files...</p>
                                         {progress && (
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                                                 {progress.currentFileName} ({progress.completedFiles + 1}/{progress.totalFiles})
                                             </p>
                                         )}
                                     </div>
-                                    <span className="text-sm font-mono">{progress?.overallProgress ?? 0}%</span>
+                                    <span className="text-xs sm:text-sm font-mono shrink-0">{progress?.overallProgress ?? 0}%</span>
                                 </div>
                                 <Progress value={progress?.overallProgress ?? 0} className="w-full" />
                                 {progress && (
-                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                    <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground">
                                         <span>{formatBytes(progress.bytesTransferred)} / {formatBytes(progress.totalBytes)}</span>
                                         <span>{formatBytes(progress.speed)}/s</span>
                                     </div>
                                 )}
-                                <Button variant="outline" size="sm" onClick={handleCancel} className="w-full">
+                                <Button variant="outline" size="sm" onClick={handleCancel} className="w-full h-9 sm:h-10">
                                     Cancel
                                 </Button>
                             </Card>
@@ -522,27 +525,27 @@ const P2PShare = () => {
 
                         {/* Success */}
                         {transferState === 'success' && (
-                            <Card className="p-6 text-center space-y-3">
-                                <div className="mx-auto h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                    <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
+                            <Card className="p-4 sm:p-6 text-center space-y-3">
+                                <div className="mx-auto h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                    <Check className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
                                 </div>
-                                <p className="font-medium text-green-600 dark:text-green-400">Transfer complete!</p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="font-medium text-sm sm:text-base text-green-600 dark:text-green-400">Transfer complete!</p>
+                                <p className="text-xs sm:text-sm text-muted-foreground">
                                     {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} sent successfully
                                 </p>
-                                <Button variant="outline" size="sm" onClick={reset}>Share More</Button>
+                                <Button variant="outline" size="sm" onClick={reset} className="h-9">Share More</Button>
                             </Card>
                         )}
 
                         {/* Error */}
                         {transferState === 'error' && (
-                            <Card className="p-6 text-center space-y-3 border-destructive">
-                                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/20 flex items-center justify-center">
-                                    <X className="h-6 w-6 text-destructive" />
+                            <Card className="p-4 sm:p-6 text-center space-y-3 border-destructive">
+                                <div className="mx-auto h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                                    <X className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
                                 </div>
-                                <p className="font-medium text-destructive">Transfer failed</p>
-                                <p className="text-sm text-muted-foreground">{errorMessage || 'Please try again'}</p>
-                                <Button variant="outline" size="sm" onClick={reset}>Try Again</Button>
+                                <p className="font-medium text-sm sm:text-base text-destructive">Transfer failed</p>
+                                <p className="text-xs sm:text-sm text-muted-foreground">{errorMessage || 'Please try again'}</p>
+                                <Button variant="outline" size="sm" onClick={reset} className="h-9">Try Again</Button>
                             </Card>
                         )}
                     </div>
@@ -555,8 +558,8 @@ const P2PShare = () => {
                     <div className="space-y-4">
                         {/* Enter code */}
                         {status !== 'connected' && transferState !== 'transferring' && transferState !== 'success' && transferState !== 'error' && (
-                            <Card className="p-6 text-center space-y-4">
-                                <p className="text-sm text-muted-foreground">Enter the share code from the sender</p>
+                            <Card className="p-4 sm:p-6 text-center space-y-4">
+                                <p className="text-xs sm:text-sm text-muted-foreground">Enter the share code from the sender</p>
                                 <div className="flex justify-center">
                                     <InputOTP
                                         maxLength={6}
@@ -574,81 +577,81 @@ const P2PShare = () => {
                                         }}
                                     >
                                         <InputOTPGroup>
-                                            <InputOTPSlot index={0} className="h-12 w-10 text-lg font-mono" />
-                                            <InputOTPSlot index={1} className="h-12 w-10 text-lg font-mono" />
-                                            <InputOTPSlot index={2} className="h-12 w-10 text-lg font-mono" />
-                                            <InputOTPSlot index={3} className="h-12 w-10 text-lg font-mono" />
-                                            <InputOTPSlot index={4} className="h-12 w-10 text-lg font-mono" />
-                                            <InputOTPSlot index={5} className="h-12 w-10 text-lg font-mono" />
+                                            <InputOTPSlot index={0} className="h-10 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono" />
+                                            <InputOTPSlot index={1} className="h-10 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono" />
+                                            <InputOTPSlot index={2} className="h-10 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono" />
+                                            <InputOTPSlot index={3} className="h-10 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono" />
+                                            <InputOTPSlot index={4} className="h-10 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono" />
+                                            <InputOTPSlot index={5} className="h-10 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono" />
                                         </InputOTPGroup>
                                     </InputOTP>
                                 </div>
                                 <Button
                                     onClick={handleJoin}
                                     disabled={receiveCode.length < 6 || status === 'joining' || status === 'connecting'}
-                                    className="gap-1.5"
+                                    className="gap-1.5 h-10 sm:h-11"
                                 >
                                     {(status === 'joining' || status === 'connecting') && (
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                     )}
                                     {status === 'joining' ? 'Joining...' : status === 'connecting' ? 'Connecting...' : 'Connect'}
                                 </Button>
-                                {sessionError && <p className="text-sm text-destructive">{sessionError}</p>}
+                                {sessionError && <p className="text-xs sm:text-sm text-destructive">{sessionError}</p>}
                             </Card>
                         )}
 
                         {/* Pending transfer — accept/decline */}
                         {pendingTransfer && transferState !== 'transferring' && transferState !== 'success' && (
-                            <Card className="p-6 space-y-4">
-                                <h3 className="font-semibold text-center">Incoming Transfer</h3>
-                                <div className="bg-muted rounded-lg p-3 space-y-1.5">
+                            <Card className="p-4 sm:p-6 space-y-4">
+                                <h3 className="font-semibold text-center text-sm sm:text-base">Incoming Transfer</h3>
+                                <div className="bg-muted rounded-lg p-2.5 sm:p-3 space-y-1.5 max-h-40 overflow-y-auto">
                                     {pendingTransfer.metadata.files.map((f, i) => (
-                                        <div key={i} className="flex items-center justify-between text-sm">
-                                            <span className="truncate flex-1 mr-2">{f.relativePath || f.name}</span>
+                                        <div key={i} className="flex items-center justify-between text-xs sm:text-sm gap-2">
+                                            <span className="truncate flex-1 min-w-0">{f.relativePath || f.name}</span>
                                             <span className="text-muted-foreground shrink-0">{formatBytes(f.size)}</span>
                                         </div>
                                     ))}
                                 </div>
-                                <p className="text-center text-sm text-muted-foreground">
+                                <p className="text-center text-xs sm:text-sm text-muted-foreground">
                                     {pendingTransfer.metadata.totalFiles} file{pendingTransfer.metadata.totalFiles > 1 ? 's' : ''} • {formatBytes(pendingTransfer.metadata.totalSize)}
                                 </p>
                                 <div className="flex gap-2 justify-center">
-                                    <Button variant="outline" onClick={handleDecline}>Decline</Button>
-                                    <Button onClick={handleAccept}>Accept & Download</Button>
+                                    <Button variant="outline" onClick={handleDecline} className="h-9 sm:h-10">Decline</Button>
+                                    <Button onClick={handleAccept} className="h-9 sm:h-10">Accept & Download</Button>
                                 </div>
                             </Card>
                         )}
 
                         {/* Connected, waiting for files */}
                         {connection && !pendingTransfer && transferState !== 'transferring' && transferState !== 'success' && transferState !== 'error' && (
-                            <Card className="p-6 text-center space-y-3">
-                                <Loader2 className="h-6 w-6 mx-auto animate-spin text-primary" />
-                                <p className="text-sm text-muted-foreground">Connected! Waiting for sender to start transfer...</p>
+                            <Card className="p-4 sm:p-6 text-center space-y-3">
+                                <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 mx-auto animate-spin text-primary" />
+                                <p className="text-xs sm:text-sm text-muted-foreground">Connected! Waiting for sender to start transfer...</p>
                             </Card>
                         )}
 
                         {/* Receiving progress */}
                         {transferState === 'transferring' && (
-                            <Card className="p-6 space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium text-sm">Receiving files...</p>
+                            <Card className="p-4 sm:p-6 space-y-4">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium text-xs sm:text-sm">Receiving files...</p>
                                         {progress && (
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                                                 {progress.currentFileName} ({progress.completedFiles + 1}/{progress.totalFiles})
                                             </p>
                                         )}
                                     </div>
-                                    <span className="text-sm font-mono">{progress?.overallProgress ?? 0}%</span>
+                                    <span className="text-xs sm:text-sm font-mono shrink-0">{progress?.overallProgress ?? 0}%</span>
                                 </div>
                                 <Progress value={progress?.overallProgress ?? 0} className="w-full" />
                                 {progress && (
-                                    <div className="flex justify-between text-xs text-muted-foreground">
+                                    <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground">
                                         <span>{formatBytes(progress.bytesTransferred)} / {formatBytes(progress.totalBytes)}</span>
                                         <span>{formatBytes(progress.speed)}/s</span>
                                     </div>
                                 )}
-                                <Button variant="outline" size="sm" onClick={handleCancel} className="w-full">
+                                <Button variant="outline" size="sm" onClick={handleCancel} className="w-full h-9 sm:h-10">
                                     Cancel
                                 </Button>
                             </Card>
@@ -656,25 +659,25 @@ const P2PShare = () => {
 
                         {/* Success */}
                         {transferState === 'success' && (
-                            <Card className="p-6 text-center space-y-3">
-                                <div className="mx-auto h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                    <Check className="h-6 w-6 text-green-600 dark:text-green-400" />
+                            <Card className="p-4 sm:p-6 text-center space-y-3">
+                                <div className="mx-auto h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                    <Check className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
                                 </div>
-                                <p className="font-medium text-green-600 dark:text-green-400">Files received!</p>
-                                <p className="text-sm text-muted-foreground">Downloads should start automatically</p>
-                                <Button variant="outline" size="sm" onClick={reset}>Receive More</Button>
+                                <p className="font-medium text-sm sm:text-base text-green-600 dark:text-green-400">Files received!</p>
+                                <p className="text-xs sm:text-sm text-muted-foreground">Downloads should start automatically</p>
+                                <Button variant="outline" size="sm" onClick={reset} className="h-9">Receive More</Button>
                             </Card>
                         )}
 
                         {/* Error */}
                         {transferState === 'error' && (
-                            <Card className="p-6 text-center space-y-3 border-destructive">
-                                <div className="mx-auto h-12 w-12 rounded-full bg-destructive/20 flex items-center justify-center">
-                                    <X className="h-6 w-6 text-destructive" />
+                            <Card className="p-4 sm:p-6 text-center space-y-3 border-destructive">
+                                <div className="mx-auto h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                                    <X className="h-5 w-5 sm:h-6 sm:w-6 text-destructive" />
                                 </div>
-                                <p className="font-medium text-destructive">Transfer failed</p>
-                                <p className="text-sm text-muted-foreground">{errorMessage || 'Please try again'}</p>
-                                <Button variant="outline" size="sm" onClick={reset}>Try Again</Button>
+                                <p className="font-medium text-sm sm:text-base text-destructive">Transfer failed</p>
+                                <p className="text-xs sm:text-sm text-muted-foreground">{errorMessage || 'Please try again'}</p>
+                                <Button variant="outline" size="sm" onClick={reset} className="h-9">Try Again</Button>
                             </Card>
                         )}
                     </div>
