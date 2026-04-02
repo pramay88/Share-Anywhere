@@ -183,23 +183,38 @@ const History = () => {
     }, []);
 
     const formatDownloads = useCallback((item: HistoryRecord) => {
-        if (item.direction === 'receive') return '-';
-        return String(item.downloadsCount || 0);
+        // P2P is always 1-to-1
+        if (item.transferType === 'p2p') {
+            return '1';
+        }
+        // Internet shares show actual download count
+        return String(item.downloadsCount || "-");
     }, []);
 
-    const statusDotClass = useCallback((status: HistoryRecord['status'], transferType?: string) => {
-        // P2P transfers can only be success or failed (never active)
-        if (transferType === 'p2p') {
-            if (status === 'failed') return 'border-red-500 bg-transparent';
-            return 'border-emerald-500 bg-emerald-500'; // success, cancelled, etc. are filled green
+    // Color and icon for transfer type based on status
+    const getTransferTypeIcon = useCallback((item: HistoryRecord) => {
+        if (item.transferType === 'p2p') {
+            // P2P: green if success, red if failed
+            const isSuccess = item.status === 'success';
+            return {
+                icon: Wifi,
+                className: isSuccess ? 'text-emerald-500' : 'text-red-500',
+            };
+        } else {
+            // Internet/Cloud: red=failed, yellow=active/success, green=expired/cancelled
+            let className = 'text-slate-400';
+            if (item.status === 'failed') {
+                className = 'text-red-500';
+            } else if (item.status === 'active' || item.status === 'success') {
+                className = 'text-yellow-500';
+            } else if (item.status === 'expired' || item.status === 'cancelled') {
+                className = 'text-emerald-500';
+            }
+            return {
+                icon: Globe,
+                className,
+            };
         }
-
-        // Internet shares can be active or completed
-        if (status === 'active') return 'border-emerald-500 bg-transparent'; // hollow green
-        if (status === 'success') return 'border-emerald-500 bg-emerald-500'; // filled green
-        if (status === 'failed') return 'border-red-500 bg-transparent'; // red hollow
-        if (status === 'cancelled' || status === 'pending') return 'border-emerald-500 bg-emerald-500'; // expired/terminated = filled green
-        return 'border-slate-300 bg-slate-300';
     }, []);
 
     // Fast loading with 2 parallel calls: history + active shares
@@ -620,9 +635,7 @@ const History = () => {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead className='pl-6'>Name</TableHead>
-                                            <TableHead> </TableHead>
                                             <TableHead>Time</TableHead>
-                                            <TableHead>Dur</TableHead>
                                             <TableHead>Speed</TableHead>
                                             <TableHead>Size</TableHead>
                                             <TableHead>DL</TableHead>
@@ -630,21 +643,22 @@ const History = () => {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filteredHistory.map((item) => (
+                                        {filteredHistory.map((item) => {
+                                            const transferIcon = getTransferTypeIcon(item);
+                                            const TransferIcon = transferIcon.icon;
+                                            
+                                            return (
                                             <TableRow key={item.id}>
                                                 <TableCell className='pl-6 font-semibold text-slate-800'>
                                                     <span className='inline-flex items-center gap-3'>
-                                                        <span className={`inline-block h-2.5 w-2.5 rounded-full border-2 ${statusDotClass(item.status, item.transferType)}`} />
+                                                        <TransferIcon className={`h-4 w-4 ${transferIcon.className}`} />
                                                         <span className='truncate max-w-[240px] sm:max-w-[320px]'>{item.fileName || 'Unknown'}</span>
                                                     </span>
                                                 </TableCell>
+                                                <TableCell className='text-slate-500'>{formatTimeAgo(item.timestamp)}</TableCell>
                                                 <TableCell>
-                                                    <span className='inline-flex items-center gap-1.5 text-slate-500'>
-                                                        {item.transferType === 'p2p' ? (
-                                                            <Wifi className='h-3.5 w-3.5' />
-                                                        ) : (
-                                                            <Globe className='h-3.5 w-3.5' />
-                                                        )}
+                                                    <span className='inline-flex items-center gap-1.5'>
+                                                        <span className='text-sky-600 font-semibold'>{formatBytes(item.speedBytesPerSec)}/s</span>
                                                         {item.direction === 'send' ? (
                                                             <ArrowUp className='h-3.5 w-3.5 text-orange-500' />
                                                         ) : (
@@ -652,18 +666,12 @@ const History = () => {
                                                         )}
                                                     </span>
                                                 </TableCell>
-                                                <TableCell className='text-slate-500'>{formatTimeAgo(item.timestamp)}</TableCell>
-                                                <TableCell className='text-slate-500'>
-                                                    <span className='inline-flex items-center gap-1'>
-                                                        <Clock3 className='h-3.5 w-3.5 text-muted-foreground' />
-                                                        {formatDuration(item.durationMs)}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className='text-sky-600 font-semibold'>{formatBytes(item.speedBytesPerSec)}/s</TableCell>
                                                 <TableCell className='text-slate-500'>{formatBytes(item.totalBytes || item.fileSize)}</TableCell>
                                                 <TableCell className='text-slate-500'>{formatDownloads(item)}</TableCell>
                                                 <TableCell className='text-center'>
-                                                    {item.status === 'active' ? (
+                                                    {item.transferType === 'p2p' ? (
+                                                        <span className='text-slate-400'>-</span>
+                                                    ) : item.status === 'active' ? (
                                                         <div className='inline-flex items-center gap-1'>
                                                             <Button
                                                                 variant='ghost'
@@ -698,10 +706,10 @@ const History = () => {
                                                                 )}
                                                             </Button>
                                                         </div>
-                                                    ) : null}
+                                                    ) : "---"}
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
+                                        )})}
                                     </TableBody>
                                 </Table>
                                 </div>

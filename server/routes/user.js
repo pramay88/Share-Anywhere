@@ -680,6 +680,39 @@ router.post('/:userId/shares/:shareId/terminate', publicRateLimiter, async (req,
                 status: 'cancelled',
             });
 
+            // Fetch existing history data to preserve file info
+            let existingFileData = { fileName: null, fileType: null, fileSize: 0, totalBytes: 0, durationMs: 0, speedBytesPerSec: 0 };
+            try {
+                const historyDoc = await db.collection('history').doc(transferId).get();
+                if (historyDoc.exists) {
+                    const hData = historyDoc.data();
+                    existingFileData = {
+                        fileName: hData.file?.name || null,
+                        fileType: hData.file?.type || null,
+                        fileSize: hData.file?.size || 0,
+                        totalBytes: hData.totalBytes || 0,
+                        durationMs: hData.durationMs || 0,
+                        speedBytesPerSec: hData.speedBytesPerSec || 0,
+                    };
+                } else {
+                    // Try active_shares as fallback
+                    const activeDoc = await db.collection('active_shares').doc(`internet_${transferId}`).get();
+                    if (activeDoc.exists) {
+                        const aData = activeDoc.data();
+                        existingFileData = {
+                            fileName: aData.file?.name || null,
+                            fileType: aData.file?.type || null,
+                            fileSize: aData.file?.size || 0,
+                            totalBytes: aData.totalBytes || 0,
+                            durationMs: 0,
+                            speedBytesPerSec: 0,
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to fetch existing file data for termination:', e);
+            }
+
             // Queue analytics event for termination
             enqueueAnalyticsEvent({
                 userId,
@@ -689,8 +722,7 @@ router.post('/:userId/shares/:shareId/terminate', publicRateLimiter, async (req,
                 direction: 'send',
                 status: 'cancelled',
                 retries: 0,
-                durationMs: 0,
-                totalBytes: 0,
+                ...existingFileData,
                 metadata: { source: 'share-terminate' },
                 clientTimestamp: new Date().toISOString(),
             });
@@ -732,16 +764,49 @@ router.post('/:userId/shares/:shareId/terminate', publicRateLimiter, async (req,
                 terminated: true,
             });
 
+            // Fetch existing history data to preserve file info
+            const shareCode = shareData.shareCode || shareData.code || docId;
+            let existingFileData = { fileName: null, fileType: null, fileSize: 0, totalBytes: 0, durationMs: 0, speedBytesPerSec: 0 };
+            try {
+                const historyDoc = await db.collection('history').doc(shareCode).get();
+                if (historyDoc.exists) {
+                    const hData = historyDoc.data();
+                    existingFileData = {
+                        fileName: hData.file?.name || null,
+                        fileType: hData.file?.type || null,
+                        fileSize: hData.file?.size || 0,
+                        totalBytes: hData.totalBytes || 0,
+                        durationMs: hData.durationMs || 0,
+                        speedBytesPerSec: hData.speedBytesPerSec || 0,
+                    };
+                } else {
+                    // Try active_shares as fallback
+                    const activeDoc = await db.collection('active_shares').doc(`internet_${shareCode}`).get();
+                    if (activeDoc.exists) {
+                        const aData = activeDoc.data();
+                        existingFileData = {
+                            fileName: aData.file?.name || null,
+                            fileType: aData.file?.type || null,
+                            fileSize: aData.file?.size || 0,
+                            totalBytes: aData.totalBytes || 0,
+                            durationMs: 0,
+                            speedBytesPerSec: 0,
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to fetch existing file data for termination:', e);
+            }
+
             // Queue analytics event for termination
             enqueueAnalyticsEvent({
                 userId,
-                shareCode: shareData.shareCode || shareData.code || docId,
+                shareCode,
                 transferType: 'internet',
                 direction: 'send',
                 status: 'cancelled',
                 retries: 0,
-                durationMs: 0,
-                totalBytes: 0,
+                ...existingFileData,
                 metadata: { source: 'share-terminate' },
                 clientTimestamp: new Date().toISOString(),
             });
@@ -781,6 +846,39 @@ router.post('/:userId/shares/:shareId/terminate', publicRateLimiter, async (req,
             terminated: true,
         });
 
+        // Fetch existing history data to preserve file info
+        let existingFileData = { fileName: null, fileType: null, fileSize: 0, totalBytes: 0, durationMs: 0, speedBytesPerSec: 0 };
+        try {
+            const historyDoc = await db.collection('history').doc(shareId).get();
+            if (historyDoc.exists) {
+                const hData = historyDoc.data();
+                existingFileData = {
+                    fileName: hData.file?.name || null,
+                    fileType: hData.file?.type || null,
+                    fileSize: hData.file?.size || 0,
+                    totalBytes: hData.totalBytes || 0,
+                    durationMs: hData.durationMs || 0,
+                    speedBytesPerSec: hData.speedBytesPerSec || 0,
+                };
+            } else {
+                // Try active_shares as fallback
+                const activeDoc = await db.collection('active_shares').doc(`internet_${shareId}`).get();
+                if (activeDoc.exists) {
+                    const aData = activeDoc.data();
+                    existingFileData = {
+                        fileName: aData.file?.name || null,
+                        fileType: aData.file?.type || null,
+                        fileSize: aData.file?.size || 0,
+                        totalBytes: aData.totalBytes || 0,
+                        durationMs: 0,
+                        speedBytesPerSec: 0,
+                    };
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to fetch existing file data for termination:', e);
+        }
+
         // Queue analytics event for termination
         enqueueAnalyticsEvent({
             userId,
@@ -789,8 +887,7 @@ router.post('/:userId/shares/:shareId/terminate', publicRateLimiter, async (req,
             direction: 'send',
             status: 'cancelled',
             retries: 0,
-            durationMs: 0,
-            totalBytes: 0,
+            ...existingFileData,
             metadata: { source: 'share-terminate' },
             clientTimestamp: new Date().toISOString(),
         });

@@ -1,10 +1,36 @@
 import { db, admin } from '../../../../_lib/firebase-admin.js';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true,
+});
+
+/**
+ * Delete file from Cloudinary
+ */
+async function deleteFromCloudinary(publicId) {
+    try {
+        const result = await cloudinary.uploader.destroy(publicId, {
+            invalidate: true,
+        });
+        console.log(`✅ Deleted from Cloudinary: ${publicId}`, result);
+        return result;
+    } catch (error) {
+        console.error(`❌ Cloudinary deletion failed for ${publicId}:`, error.message);
+        throw error;
+    }
+}
 
 /**
  * POST /api/user/[userId]/shares/[shareId]/terminate
  * Terminates/expires an active share
  * - Sets expiresAt to current time
  * - Marks as expired/terminated
+ * - Deletes files from Cloudinary
  * - Keeps history record but makes it unavailable for download
  */
 export default async function handler(req, res) {
@@ -45,6 +71,28 @@ export default async function handler(req, res) {
                     return res.status(403).json({ success: false, error: 'Unauthorized' });
                 }
 
+                // Get all files in the transfer and delete from Cloudinary
+                try {
+                    const filesSnapshot = await db.collection('transfers').doc(transferId).collection('files').get();
+                    const cloudinaryIds = filesSnapshot.docs
+                        .map(doc => doc.data().cloudinary_public_id)
+                        .filter(Boolean);
+                    
+                    if (cloudinaryIds.length > 0) {
+                        console.log(`🗑️  Deleting ${cloudinaryIds.length} files from Cloudinary...`);
+                        const deleteResults = await Promise.allSettled(
+                            cloudinaryIds.map(publicId => deleteFromCloudinary(publicId))
+                        );
+                        
+                        const succeeded = deleteResults.filter(r => r.status === 'fulfilled').length;
+                        const failed = deleteResults.filter(r => r.status === 'rejected').length;
+                        console.log(`✅ Cloudinary deletion: ${succeeded} succeeded, ${failed} failed`);
+                    }
+                } catch (cloudinaryError) {
+                    console.error(`⚠️  Cloudinary deletion error (non-blocking):`, cloudinaryError.message);
+                    // Continue anyway
+                }
+
                 // Mark as expired
                 await transferRef.update({
                     expires_at: admin.firestore.Timestamp.fromDate(now),
@@ -77,11 +125,24 @@ export default async function handler(req, res) {
                     return res.status(403).json({ success: false, error: 'Unauthorized' });
                 }
 
-                // Mark as expired
+                // Delete from Cloudinary if file share
+                if (shareData.cloudinaryPublicId) {
+                    try {
+                        const result = await deleteFromCloudinary(shareData.cloudinaryPublicId);
+                        console.log(`✅ Deleted Cloudinary file: ${shareData.cloudinaryPublicId}`, result);
+                    } catch (cloudinaryError) {
+                        console.error(`⚠️  Cloudinary deletion failed (non-blocking):`, cloudinaryError.message);
+                        // Continue anyway - Firestore update is more important
+                    }
+                }
+
+                // Mark as expired and clear Cloudinary references
                 await shareRef.update({
                     expiresAt: admin.firestore.Timestamp.fromDate(now),
                     status: 'cancelled',
                     terminated: true,
+                    cloudinaryPublicId: null,
+                    cloudinaryUrl: null,
                     updatedAt: admin.firestore.Timestamp.fromDate(now),
                 });
 

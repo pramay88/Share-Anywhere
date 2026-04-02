@@ -107,6 +107,12 @@ function buildAggregateDelta(event) {
         total_downloads: 0,
     };
 
+    // Don't count cancelled events in aggregate stats
+    // Cancellation is just an update, not a completed transfer
+    if (event.status === 'cancelled') {
+        return delta; // Return zeros
+    }
+
     if (TERMINAL_STATUSES.has(event.status)) {
         delta.total_transfers += 1;
     }
@@ -116,7 +122,7 @@ function buildAggregateDelta(event) {
         delta.total_duration += normalizeNumber(event.durationMs, 0);
     }
 
-    if (event.status === 'failed' || event.status === 'cancelled') {
+    if (event.status === 'failed') {
         delta.total_failures += 1;
     }
 
@@ -210,6 +216,14 @@ export function normalizeHistoryRecord(raw, id) {
 
 export async function processAnalyticsEvent(db, payload, userId = null) {
     const event = sanitizeEvent({ ...payload, userId });
+    
+    // Skip all analytics processing for cancelled/terminated events
+    // Termination should only update existing docs, not create new analytics records
+    if (event.status === 'cancelled') {
+        console.log(`✓ Skipping analytics for cancelled event: transferId=${event.transferId} (termination handled by API endpoint)`);
+        return { version: DATA_VERSION, accepted: false, reason: 'cancelled_events_ignored' };
+    }
+    
     const batch = db.batch();
 
     const activeRef = db.collection('active_shares').doc(activeDocId(event));
@@ -232,9 +246,20 @@ export async function processAnalyticsEvent(db, payload, userId = null) {
             batch.delete(activeRef);
         }
 
-        if (!event.isEphemeral) {
+        // Only write to history on 'success' or 'failed' - NOT on 'cancelled'
+        // Cancellation is just an update to existing transfer, not a new history entry
+        // This prevents duplicate "Unknown" records when terminating
+        const shouldWriteHistory = !event.isEphemeral && 
+                                   event.status !== 'cancelled' &&
+                                   (event.fileName && (event.fileSize > 0 || event.totalBytes > 0) || event.transferType === 'p2p');
+        
+        if (shouldWriteHistory) {
             const historyRef = db.collection('history').doc();
             batch.set(historyRef, buildHistoryDoc(event));
+        } else if (!event.isEphemeral && event.status === 'cancelled') {
+            console.log(`✓ Skipping history write for cancelled event (termination only updates existing records): transferId=${event.transferId}`);
+        } else if (!event.isEphemeral) {
+            console.log(`⚠️  Skipping history write for incomplete event: transferId=${event.transferId}, status=${event.status}, fileName=${event.fileName}`);
         }
     }
 

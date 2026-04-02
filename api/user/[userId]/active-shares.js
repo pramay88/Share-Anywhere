@@ -3,6 +3,18 @@ import { DATA_VERSION, toDate } from '../../_lib/analytics.js';
 
 const ACTIVE_SHARE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/**
+ * GET /api/user/[userId]/active-shares
+ * 
+ * Returns currently active (downloadable) shares for a user.
+ * Queries both `shares` AND `transfers` collections to catch all active transfers.
+ * 
+ * A share is considered "active" if:
+ * 1. Status is 'ready', 'pending', or 'active'
+ * 2. Not expired (expiresAt > now)
+ * 3. Not a consumed ephemeral share
+ * 4. Not terminated
+ */
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
         return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -15,17 +27,9 @@ export default async function handler(req, res) {
         }
 
         const now = Date.now();
-        const twentyFourHoursAgo = now - ACTIVE_SHARE_EXPIRY_MS;
 
-        const [snapshot, transfersSnapshot, sharesSnapshotByOwnerId, sharesSnapshotByOwnerSnake] = await Promise.all([
-            db.collection('active_shares')
-                .where('userId', '==', userId)
-                .limit(500)
-                .get(),
-            db.collection('transfers')
-                .where('owner_id', '==', userId)
-                .limit(500)
-                .get(),
+        // Query both shares and transfers collections
+        const [sharesSnapshotByOwnerId, sharesSnapshotByOwnerSnake, transfersSnapshot] = await Promise.all([
             db.collection('shares')
                 .where('ownerId', '==', userId)
                 .limit(500)
@@ -34,180 +38,76 @@ export default async function handler(req, res) {
                 .where('owner_id', '==', userId)
                 .limit(500)
                 .get(),
+            db.collection('transfers')
+                .where('owner_id', '==', userId)
+                .limit(500)
+                .get(),
         ]);
 
-        // Process active_shares collection - only include if not expired
-        const queueActiveShares = snapshot.docs
-            .map((doc) => ({ id: doc.id, ...doc.data() }))
-            .filter((row) => {
-                // Only include if status is active/pending AND not marked as terminated/expired
-                const isActiveStatus = ['active', 'pending'].includes(String(row.status || '').toLowerCase());
-                if (!isActiveStatus) return false;
-
-                // P2P is one-time and should never be listed as active.
-                if (String(row.transferType || '').toLowerCase() === 'p2p') {
-                    return false;
-                }
-
-                // Check expiration - if expiresAt is set and in the past, skip it
-                const expiresAt = toDate(row.expiresAt);
-                if (expiresAt && expiresAt.getTime() <= now) {
-                    return false;
-                }
-
-                // Check if created within 24 hours
-                const startedAt = toDate(row.startedAt);
-                if (startedAt && startedAt.getTime() < twentyFourHoursAgo) {
-                    return false;
-                }
-
-                return true;
-            })
-            .sort((a, b) => {
-                const at = toDate(a.updatedAt || a.startedAt)?.getTime() || 0;
-                const bt = toDate(b.updatedAt || b.startedAt)?.getTime() || 0;
-                return bt - at;
-            })
-            .map((row) => ({
-                id: row.id,
-                transferId: row.transferId || null,
-                shareCode: row.shareCode || null,
-                transferType: row.transferType || 'internet',
-                direction: row.direction || 'send',
-                status: 'active',
-                fileName: row.file?.name || null,
-                fileType: row.file?.type || null,
-                fileSize: row.file?.size || 0,
-                totalBytes: row.totalBytes || 0,
-                downloads_count: row.downloads_count || 0,
-                is_ephemeral: row.is_ephemeral === true,
-                timestamp: toDate(row.startedAt)?.toISOString() || new Date().toISOString(),
-                expiresAt: toDate(row.expiresAt)?.toISOString() || null,
-            }));
-
-        // Process transfers collection - only include if not expired and within 24h
-        const transferRows = transfersSnapshot.docs
-            .map((doc) => ({ id: doc.id, ...doc.data() }))
-            .filter((row) => {
-                // Check if transfer is still active (has expiration in future)
-                const expiresAt = toDate(row.expires_at || row.expiresAt);
-                if (expiresAt && expiresAt.getTime() <= now) {
-                    return false;
-                }
-
-                // Check if created within 24 hours
-                const createdAt = toDate(row.created_at || row.createdAt);
-                if (createdAt && createdAt.getTime() < twentyFourHoursAgo) {
-                    return false;
-                }
-
-                return true;
-            });
-
-        const transferActiveShares = await Promise.all(transferRows.map(async (row) => {
-            let fileName = null;
-            let fileType = null;
-            let fileSize = 0;
-
-            if (row.content_type === 'text') {
-                const textContent = String(row.text_content || row.textContent || '');
-                fileName = 'Text content';
-                fileType = 'text/plain';
-                fileSize = textContent ? Buffer.byteLength(textContent, 'utf8') : Number(row.total_bytes || row.totalBytes || 0);
-            } else {
-                // Pull real file metadata from transfers/{transferId}/files when available.
-                try {
-                    const filesSnapshot = await db.collection('transfers').doc(row.id).collection('files').limit(1).get();
-                    if (!filesSnapshot.empty) {
-                        const file = filesSnapshot.docs[0].data();
-                        fileName = file.original_name || file.file_name || null;
-                        fileType = file.mime_type || file.file_type || null;
-                        fileSize = Number(file.file_size || file.size || 0);
-                    }
-                } catch {
-                    // Keep response resilient even if subcollection read fails.
-                }
+        // Process shares collection
+        const seenIds = new Set();
+        const sharesDocs = [];
+        
+        for (const doc of [...sharesSnapshotByOwnerId.docs, ...sharesSnapshotByOwnerSnake.docs]) {
+            if (!seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                sharesDocs.push(doc);
             }
-
-            const totalBytes = Number(row.total_bytes || row.totalBytes || fileSize || 0);
-            return {
-                id: `transfer_${row.id}`,
-                transferId: row.id,
-                shareCode: row.share_code || row.shareCode || row.id || null,
-                transferType: 'internet',
-                direction: 'send',
-                status: 'active',
-                fileName: row.file_name || row.fileName || fileName || row.share_code || row.id || 'Unknown',
-                fileType: row.file_type || row.fileType || fileType,
-                fileSize: Number(row.file_size || row.fileSize || fileSize || 0),
-                totalBytes,
-                downloads_count: Number(row.consume_count || row.downloads_count || row.downloadCount || 0),
-                is_ephemeral: row.is_ephemeral === true,
-                timestamp: toDate(row.created_at || row.createdAt)?.toISOString() || new Date().toISOString(),
-                expiresAt: toDate(row.expires_at || row.expiresAt)?.toISOString() || null,
-            };
-        }));
-
-        // Process shares collection - these have the actual file metadata
-        const sharesDocs = [
-            ...sharesSnapshotByOwnerId.docs,
-            ...sharesSnapshotByOwnerSnake.docs,
-        ];
+        }
 
         const sharesActive = sharesDocs
-            .map((doc) => ({ id: doc.id, ...doc.data() }))
-            .filter((row) => {
-                const status = String(row.status || '').toLowerCase();
+            .map((doc) => {
+                const data = doc.data();
+                const status = String(data.status || '').toLowerCase();
+                
                 // Only include downloadable shares
                 if (!['ready', 'pending', 'active'].includes(status)) {
-                    return false;
+                    return null;
                 }
 
-                const expiresAt = toDate(row.expiresAt || row.expires_at);
+                // Check expiration
+                const expiresAt = toDate(data.expiresAt || data.expires_at);
                 if (expiresAt && expiresAt.getTime() <= now) {
-                    return false;
+                    return null;
                 }
 
-                // Check if within 24 hours
-                const createdAt = toDate(row.createdAt || row.created_at);
-                if (createdAt && createdAt.getTime() < twentyFourHoursAgo) {
-                    return false;
+                // Skip terminated
+                if (data.terminated === true) {
+                    return null;
                 }
 
-                // Optional one-time behavior: if ephemeral and already downloaded, treat inactive
-                const isEphemeral = row.is_ephemeral === true || row.isEphemeral === true;
-                const downloads = Number(row.downloadCount || row.downloads_count || 0);
+                // Check ephemeral + consumed
+                const isEphemeral = data.is_ephemeral === true || data.isEphemeral === true;
+                const downloads = Number(data.downloadCount || data.downloads_count || 0);
                 if (isEphemeral && downloads > 0) {
-                    return false;
+                    return null;
                 }
 
-                return true;
-            })
-            .map((row) => {
-                // Determine content type and extract proper file metadata
-                const contentType = row.contentType || row.type || 'file';
+                // Determine content type and extract file metadata
+                const contentType = data.contentType || data.type || 'file';
                 let fileName, fileSize, fileType;
-                const isEphemeral = row.is_ephemeral === true || row.isEphemeral === true;
 
                 if (contentType === 'text') {
                     fileName = 'Text content';
                     fileType = 'text/plain';
-                    fileSize = row.content ? Buffer.byteLength(row.content, 'utf8') : 0;
+                    fileSize = data.content ? Buffer.byteLength(data.content, 'utf8') : 0;
                 } else if (contentType === 'url') {
-                    fileName = row.title || 'URL link';
+                    fileName = data.title || 'URL link';
                     fileType = null;
                     fileSize = 0;
                 } else {
                     // File content
-                    fileName = row.fileName || row.shareCode || row.code || row.id || 'Unknown';
-                    fileSize = Number(row.fileSize || 0);
-                    fileType = row.mimeType || 'application/octet-stream';
+                    fileName = data.fileName || data.shareCode || doc.id || 'Unknown';
+                    fileSize = Number(data.fileSize || 0);
+                    fileType = data.mimeType || 'application/octet-stream';
                 }
 
-                const shareCode = row.shareCode || row.code || row.id;
+                const shareCode = data.shareCode || doc.id;
+                const createdAt = toDate(data.createdAt || data.created_at);
+
                 return {
-                    id: `share_${row.id}`,
-                    transferId: row.transferId || row.id,
+                    id: shareCode,
+                    transferId: doc.id,
                     shareCode,
                     transferType: 'internet',
                     direction: 'send',
@@ -216,47 +116,110 @@ export default async function handler(req, res) {
                     fileType,
                     fileSize,
                     totalBytes: fileSize,
-                    downloads_count: Number(row.downloadCount || row.downloads_count || 0),
+                    downloads_count: downloads,
                     is_ephemeral: isEphemeral,
-                    timestamp: toDate(row.createdAt || row.created_at)?.toISOString() || new Date().toISOString(),
-                    expiresAt: toDate(row.expiresAt || row.expires_at)?.toISOString() || null,
+                    timestamp: createdAt?.toISOString() || new Date().toISOString(),
+                    expiresAt: expiresAt?.toISOString() || null,
                 };
+            })
+            .filter(Boolean);
+
+        // Process transfers collection - check for multiple files
+        const transfersActive = (await Promise.all(
+            transfersSnapshot.docs
+                .filter((doc) => {
+                    const data = doc.data();
+                    
+                    // Check status
+                    const status = String(data.status || 'active').toLowerCase();
+                    if (status === 'cancelled' || data.terminated === true) {
+                        return false;
+                    }
+                    
+                    // Check expiration
+                    const expiresAt = toDate(data.expires_at || data.expiresAt);
+                    if (expiresAt && expiresAt.getTime() <= now) {
+                        return false;
+                    }
+                    
+                    return true;
+                })
+                .map(async (doc) => {
+                    const data = doc.data();
+                    const createdAt = toDate(data.created_at || data.createdAt);
+                    const expiresAt = toDate(data.expires_at || data.expiresAt);
+                    
+                    // Check files subcollection to count files
+                    const filesSnapshot = await db.collection('transfers').doc(doc.id).collection('files').get();
+                    const fileCount = filesSnapshot.size;
+                    
+                    let fileName = null;
+                    let fileSize = 0;
+                    let fileType = null;
+                    let totalBytes = 0;
+                    
+                    if (data.content_type === 'text') {
+                        const textContent = String(data.text_content || '');
+                        fileName = 'Text content';
+                        fileType = 'text/plain';
+                        fileSize = textContent ? Buffer.byteLength(textContent, 'utf8') : 0;
+                        totalBytes = fileSize;
+                    } else if (fileCount === 0) {
+                        // No files - this is an incomplete/phantom transfer, skip it
+                        console.log(`⚠️  Skipping active transfer ${doc.id} with no files (shareCode: ${data.share_code})`);
+                        return null;
+                    } else if (fileCount > 1) {
+                        // Multiple files
+                        fileName = 'Multiple Files';
+                        fileType = 'application/octet-stream';
+                        totalBytes = filesSnapshot.docs.reduce((sum, fileDoc) => {
+                            const fileData = fileDoc.data();
+                            return sum + Number(fileData.file_size || 0);
+                        }, 0);
+                        fileSize = totalBytes;
+                    } else if (fileCount === 1) {
+                        // Single file
+                        const fileData = filesSnapshot.docs[0].data();
+                        fileName = fileData.original_name || 'Unknown';
+                        fileSize = Number(fileData.file_size || 0);
+                        fileType = fileData.mime_type || 'application/octet-stream';
+                        totalBytes = fileSize;
+                    }
+                    
+                    return {
+                        id: `transfer_${doc.id}`,
+                        transferId: doc.id,
+                        shareCode: data.share_code || doc.id,
+                        transferType: 'internet',
+                        direction: 'send',
+                        status: 'active',
+                        fileName: fileName || 'Unknown',
+                        fileType,
+                        fileSize,
+                        totalBytes,
+                        downloads_count: Number(data.consume_count || 0),
+                        is_ephemeral: false,
+                        timestamp: createdAt?.toISOString() || new Date().toISOString(),
+                        expiresAt: expiresAt?.toISOString() || null,
+                    };
+                })
+        )).filter(Boolean); // Filter out null values (phantom transfers)
+
+        // Merge and deduplicate by shareCode
+        const allActive = [...sharesActive, ...transfersActive];
+        const seenCodes = new Set();
+        const activeShares = allActive
+            .filter((item) => {
+                const key = item.shareCode || item.transferId || item.id;
+                if (seenCodes.has(key)) return false;
+                seenCodes.add(key);
+                return true;
+            })
+            .sort((a, b) => {
+                const at = toDate(a.timestamp)?.getTime() || 0;
+                const bt = toDate(b.timestamp)?.getTime() || 0;
+                return bt - at;
             });
-
-        // Prefer shares metadata, then enrich queue/transfers with it.
-        const shareByCode = new Map(sharesActive.map((item) => [item.shareCode, item]));
-        const shareByTransferId = new Map(sharesActive.map((item) => [item.transferId, item]));
-
-        const enrichFromShares = (item) => {
-            const matched = shareByCode.get(item.shareCode) || shareByTransferId.get(item.transferId) || null;
-            if (!matched) return item;
-            return {
-                ...item,
-                fileName: item.fileName || matched.fileName,
-                fileType: item.fileType || matched.fileType,
-                fileSize: Number(item.fileSize || matched.fileSize || 0),
-                totalBytes: Number(item.totalBytes || matched.totalBytes || matched.fileSize || 0),
-                downloads_count: Number(item.downloads_count || matched.downloads_count || 0),
-            };
-        };
-
-        const normalizedQueue = queueActiveShares.map(enrichFromShares);
-        const normalizedTransfers = transferActiveShares.map(enrichFromShares);
-        const allCandidates = [...sharesActive, ...normalizedQueue, ...normalizedTransfers];
-
-        // De-duplicate by shareCode then transferId then id, keeping the first (shares first for richer metadata).
-        const seen = new Set();
-        const activeShares = allCandidates.filter((item) => {
-            const key = item.shareCode || item.transferId || item.id;
-            if (!key) return true;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        }).sort((a, b) => {
-            const at = toDate(a.timestamp)?.getTime() || 0;
-            const bt = toDate(b.timestamp)?.getTime() || 0;
-            return bt - at;
-        });
 
         return res.json({
             success: true,

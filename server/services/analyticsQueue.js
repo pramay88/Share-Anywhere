@@ -273,8 +273,18 @@ async function flushQueue() {
                 }
 
                 if (!event.isEphemeral) {
-                    const historyRef = db.collection('history').doc();
-                    writeBatch.set(historyRef, buildHistoryDoc(event));
+                    // Use transferId or shareCode as document ID to enable upsert semantics
+                    // This prevents duplicate history entries when a transfer is first completed
+                    // then later cancelled/terminated
+                    // For P2P, include direction to avoid sender/receiver collision since both use same shareCode
+                    let historyDocId = event.transferId || event.shareCode || null;
+                    if (historyDocId && event.transferType === 'p2p') {
+                        historyDocId = `${historyDocId}_${event.direction}`;
+                    }
+                    const historyRef = historyDocId
+                        ? db.collection('history').doc(historyDocId)
+                        : db.collection('history').doc();
+                    writeBatch.set(historyRef, buildHistoryDoc(event), { merge: false });
                 }
             }
 
