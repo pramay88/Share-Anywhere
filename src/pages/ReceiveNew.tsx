@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Download, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Download, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import { useFileTransfer } from "@/hooks/useFileTransfer";
 import { Header } from "@/components/Header";
@@ -77,16 +77,32 @@ const ReceiveContent = () => {
             {!transfer ? (
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-3">
-                    Enter Share Code
-                  </label>
-                  <Input
-                    placeholder="Enter code"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.trim().toUpperCase())}
-                    className="text-center text-xl tracking-wider font-bold h-12"
-                    disabled={isConnecting}
-                  />
+                  <p className="text-sm text-muted-foreground text-center mb-4">
+                    Enter the share code from the sender
+                  </p>
+                  <div className="flex justify-center">
+                    <InputOTP
+                      maxLength={6}
+                      value={code}
+                      autoFocus
+                      inputMode="text"
+                      onChange={(value) => setCode(value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+                      onComplete={() => {
+                        if (!isConnecting) {
+                          handleConnect();
+                        }
+                      }}
+                    >
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} className="h-12 w-10 text-lg font-mono" />
+                        <InputOTPSlot index={1} className="h-12 w-10 text-lg font-mono" />
+                        <InputOTPSlot index={2} className="h-12 w-10 text-lg font-mono" />
+                        <InputOTPSlot index={3} className="h-12 w-10 text-lg font-mono" />
+                        <InputOTPSlot index={4} className="h-12 w-10 text-lg font-mono" />
+                        <InputOTPSlot index={5} className="h-12 w-10 text-lg font-mono" />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
                 </div>
 
                 <Button
@@ -97,7 +113,7 @@ const ReceiveContent = () => {
                 >
                   {isConnecting ? (
                     <>
-                      <div className="animate-spin mr-2 h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Connecting...
                     </>
                   ) : (

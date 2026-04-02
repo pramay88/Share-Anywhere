@@ -562,6 +562,7 @@ const P2PShare = () => {
                                         maxLength={6}
                                         value={receiveCode}
                                         autoFocus
+                                        inputMode="text"
                                         onChange={(value) => {
                                             const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
                                             setReceiveCode(normalized);
