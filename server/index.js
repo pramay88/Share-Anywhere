@@ -10,6 +10,7 @@ import corsMiddleware from './middleware/cors.js';
 import sharesRouter from './routes/shares.js';
 import userRouter from './routes/user.js';
 import p2pRouter from './routes/p2p.js';
+import adminRouter from './routes/admin.js';
 import { startAnalyticsQueueFlusher } from './services/analyticsQueue.js';
 
 // Load environment variables
@@ -51,6 +52,9 @@ app.use('/api/user', userRouter);
 
 // P2P signaling routes
 app.use('/api/p2p', p2pRouter);
+
+// Admin routes (protected)
+app.use('/api/admin', adminRouter);
 
 // 404 handler
 app.use((req, res) => {

@@ -16,8 +16,10 @@ import OfflineShare from "./pages/OfflineShareNew";
 import P2PShare from "./pages/P2PShare";
 import Auth from "./pages/Auth";
 import History from "./pages/History";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AdminProtectedRoute from "./components/AdminProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +56,11 @@ const AppContent = () => {
         <Route path="/offline-share" element={<OfflineShare />} />
         <Route path="/p2p" element={<P2PShare />} />
         <Route path="/history" element={<History />} />
+        <Route path="/admin" element={
+          <AdminProtectedRoute>
+            <Admin />
+          </AdminProtectedRoute>
+        } />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
