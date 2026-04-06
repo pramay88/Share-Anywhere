@@ -53,27 +53,64 @@ async function verifyAdminAccess(req) {
 async function fetchVercelData() {
   const token = process.env.VERCEL_API_TOKEN;
   const projectId = process.env.VERCEL_PROJECT_ID || 'share-anywhere';
-  const teamId = process.env.VERCEL_TEAM_ID;
 
   if (!token) {
     return { error: 'VERCEL_API_TOKEN not configured', data: null };
   }
 
   const headers = { Authorization: `Bearer ${token}` };
-  const teamQuery = teamId ? `?teamId=${teamId}` : '';
 
   try {
-    const [userRes, projectRes, domainsRes] = await Promise.all([
+    const [userRes, projectRes, domainsRes, deploymentsRes] = await Promise.all([
       fetch('https://api.vercel.com/v2/user', { headers }),
-      fetch(`https://api.vercel.com/v9/projects/${projectId}${teamQuery}`, { headers }),
-      fetch(`https://api.vercel.com/v9/projects/${projectId}/domains${teamQuery}`, { headers }),
+      fetch(`https://api.vercel.com/v9/projects/${projectId}`, { headers }),
+      fetch(`https://api.vercel.com/v9/projects/${projectId}/domains`, { headers }),
+      fetch(`https://api.vercel.com/v6/deployments?projectId=${projectId}&limit=10`, { headers }),
     ]);
 
-    const [userData, projectData, domainsData] = await Promise.all([
+    const [userData, projectData, domainsData, deploymentsData] = await Promise.all([
       userRes.ok ? userRes.json() : null,
       projectRes.ok ? projectRes.json() : null,
       domainsRes.ok ? domainsRes.json() : null,
+      deploymentsRes.ok ? deploymentsRes.json() : null,
     ]);
+
+    // Process deployments
+    const deployments = deploymentsData?.deployments || [];
+    const buildTimes = deployments
+      .filter(d => d.ready && d.buildingAt)
+      .map(d => Math.round((d.ready - d.buildingAt) / 1000));
+    const avgBuildTime = buildTimes.length > 0 
+      ? Math.round(buildTimes.reduce((a, b) => a + b, 0) / buildTimes.length)
+      : 0;
+
+    // Build recent activity from deployments
+    const recentActivity = deployments.slice(0, 5).map(d => {
+      const isProduction = d.target === 'production';
+      const action = isProduction ? 'Deployed' : 'Preview deployed';
+      return {
+        id: d.uid,
+        type: 'deployment',
+        text: `${action} ${d.name} (${d.meta?.githubCommitSha?.slice(0, 7)} → ${d.meta?.githubCommitRef || 'main'}) to ${isProduction ? 'production' : 'preview'}`,
+        createdAt: d.createdAt,
+      };
+    });
+
+    // Add alias assignments from targets
+    if (projectData?.targets?.production) {
+      const prod = projectData.targets.production;
+      if (prod.aliasAssigned) {
+        recentActivity.push({
+          id: 'alias-prod',
+          type: 'alias',
+          text: `Assigned ${prod.alias?.length || 0} aliases to production deployment`,
+          createdAt: prod.aliasAssigned,
+        });
+      }
+    }
+
+    // Sort by createdAt
+    recentActivity.sort((a, b) => b.createdAt - a.createdAt);
 
     return {
       error: null,
@@ -83,22 +120,44 @@ async function fetchVercelData() {
           email: userData.user.email,
           username: userData.user.username,
         } : null,
-        project: projectData ? {
-          name: projectData.name,
-          framework: projectData.framework,
-          nodeVersion: projectData.nodeVersion,
-          updatedAt: projectData.updatedAt,
-          latestDeployments: projectData.latestDeployments?.slice(0, 5).map(d => ({
-            id: d.id,
-            state: d.state,
-            createdAt: d.createdAt,
-            url: d.url,
-          })) || [],
-        } : null,
+        project: {
+          id: projectData?.id || projectId,
+          name: projectData?.name || 'share-anywhere',
+          framework: projectData?.framework || 'vite',
+          nodeVersion: projectData?.nodeVersion || '20.x',
+          plan: projectData?.targets?.production?.plan || 'hobby',
+          region: projectData?.targets?.production?.createdIn || 'sfo1',
+          analytics: !!projectData?.analytics?.id,
+          speedInsights: !!projectData?.speedInsights?.id,
+          gitRepository: projectData?.link ? {
+            repo: projectData.link.repo,
+            org: projectData.link.org,
+            type: projectData.link.type,
+            productionBranch: projectData.link.productionBranch || 'main',
+          } : null,
+        },
+        deployments: deployments.slice(0, 5).map(d => ({
+          id: d.uid,
+          name: d.name,
+          url: d.url,
+          state: d.state,
+          target: d.target || 'preview',
+          createdAt: d.createdAt,
+          buildTime: d.ready && d.buildingAt ? Math.round((d.ready - d.buildingAt) / 1000) : null,
+          meta: {
+            branch: d.meta?.githubCommitRef || 'main',
+            sha: d.meta?.githubCommitSha?.slice(0, 7),
+            message: d.meta?.githubCommitMessage?.split('\n')[0] || '',
+          },
+        })),
+        recentActivity: recentActivity.slice(0, 5),
+        totalDeployments: deploymentsData?.pagination?.count || deployments.length,
+        avgBuildTime,
         domains: domainsData?.domains?.map(d => ({
           name: d.name,
           verified: d.verified,
         })) || [],
+        domainsCount: domainsData?.pagination?.count || domainsData?.domains?.length || 0,
       },
     };
   } catch (error) {
@@ -123,9 +182,7 @@ async function fetchCloudinaryData() {
     const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${cloudName}/usage`,
-      {
-        headers: { Authorization: `Basic ${auth}` },
-      }
+      { headers: { Authorization: `Basic ${auth}` } }
     );
 
     if (!response.ok) {
@@ -137,33 +194,37 @@ async function fetchCloudinaryData() {
     return {
       error: null,
       data: {
-        plan: data.plan,
+        plan: data.plan || 'Free',
         lastUpdated: data.last_updated,
+        credits: {
+          used: data.credits?.usage || 0,
+          limit: data.credits?.limit || 25,
+          percentage: data.credits?.used_percent || 0,
+        },
         storage: {
           used: data.storage?.usage || 0,
-          limit: data.storage?.limit || 0,
-          usedFormatted: formatBytes(data.storage?.usage || 0),
-          percentage: data.storage?.limit 
-            ? Math.round((data.storage.usage / data.storage.limit) * 100) 
-            : 0,
+          credits: data.storage?.credits_usage || 0,
         },
         bandwidth: {
           used: data.bandwidth?.usage || 0,
-          limit: data.bandwidth?.limit || 0,
-          usedFormatted: formatBytes(data.bandwidth?.usage || 0),
-          percentage: data.bandwidth?.limit 
-            ? Math.round((data.bandwidth.usage / data.bandwidth.limit) * 100) 
-            : 0,
+          credits: data.bandwidth?.credits_usage || 0,
         },
         transformations: {
           used: data.transformations?.usage || 0,
-          limit: data.transformations?.limit || 0,
-          percentage: data.transformations?.limit 
-            ? Math.round((data.transformations.usage / data.transformations.limit) * 100) 
-            : 0,
+          credits: data.transformations?.credits_usage || 0,
         },
+        impressions: {
+          used: data.impressions?.usage || 0,
+        },
+        requests: data.requests || 0,
         resources: data.resources || 0,
         derivedResources: data.derived_resources || 0,
+        objects: data.objects?.usage || 0,
+        mediaLimits: {
+          imageMaxSizeBytes: data.media_limits?.image_max_size_bytes || 10485760,
+          videoMaxSizeBytes: data.media_limits?.video_max_size_bytes || 104857600,
+          imageMaxPixels: data.media_limits?.image_max_px || 25000000,
+        },
       },
     };
   } catch (error) {
@@ -192,27 +253,42 @@ async function fetchFirebaseData() {
     ).length;
 
     // Get Firestore collection stats
-    const [transfersSnap, filesSnap] = await Promise.all([
-      db.collection('transfers').count().get(),
-      db.collection('files').count().get(),
-    ]);
+    let totalTransfers = 0;
+    let totalFiles = 0;
+    let recentTransfers = [];
 
-    // Get recent transfers (last 10)
-    const recentTransfersSnap = await db.collection('transfers')
-      .orderBy('createdAt', 'desc')
-      .limit(10)
-      .get();
+    try {
+      const transfersSnap = await db.collection('transfers').count().get();
+      totalTransfers = transfersSnap.data().count || 0;
+    } catch (e) {
+      console.log('Transfers collection not found or empty');
+    }
 
-    const recentTransfers = recentTransfersSnap.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
-        fileCount: data.files?.length || 0,
-        totalSize: data.totalSize || 0,
-        expiresAt: data.expiresAt?.toDate?.()?.toISOString() || data.expiresAt,
-      };
-    });
+    try {
+      const filesSnap = await db.collection('files').count().get();
+      totalFiles = filesSnap.data().count || 0;
+    } catch (e) {
+      console.log('Files collection not found or empty');
+    }
+
+    try {
+      const recentTransfersSnap = await db.collection('transfers')
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+        .get();
+
+      recentTransfers = recentTransfersSnap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt,
+          fileCount: data.files?.length || data.fileCount || 0,
+          totalSize: data.totalSize || 0,
+        };
+      });
+    } catch (e) {
+      console.log('Could not fetch recent transfers');
+    }
 
     return {
       error: null,
@@ -222,8 +298,8 @@ async function fetchFirebaseData() {
           recentSignups: recentUsers,
         },
         firestore: {
-          totalTransfers: transfersSnap.data().count,
-          totalFiles: filesSnap.data().count,
+          totalTransfers,
+          totalFiles,
         },
         recentTransfers,
       },
@@ -238,11 +314,11 @@ async function fetchFirebaseData() {
  * Format bytes to human-readable string
  */
 function formatBytes(bytes) {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 /**
@@ -280,16 +356,6 @@ router.get('/metrics', async (req, res) => {
     vercel: vercelResult,
     cloudinary: cloudinaryResult,
     firebase: firebaseResult,
-    summary: {
-      totalUsers: firebaseResult.data?.users?.total || 0,
-      recentSignups: firebaseResult.data?.users?.recentSignups || 0,
-      totalTransfers: firebaseResult.data?.firestore?.totalTransfers || 0,
-      totalFiles: firebaseResult.data?.firestore?.totalFiles || 0,
-      storageUsed: cloudinaryResult.data?.storage?.usedFormatted || 'N/A',
-      storagePercentage: cloudinaryResult.data?.storage?.percentage || 0,
-      bandwidthUsed: cloudinaryResult.data?.bandwidth?.usedFormatted || 'N/A',
-      bandwidthPercentage: cloudinaryResult.data?.bandwidth?.percentage || 0,
-    },
     errors: {
       vercel: vercelResult.error,
       cloudinary: cloudinaryResult.error,

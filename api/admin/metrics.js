@@ -73,6 +73,7 @@ async function fetchVercelData() {
           name: userData.user.name,
           email: userData.user.email,
           username: userData.user.username,
+          avatar: userData.avatar,
         } : null,
         project: projectData ? {
           name: projectData.name,

@@ -12,23 +12,54 @@ export interface AdminMetrics {
         name: string;
         email: string;
         username: string;
+        avatar?: string;
       } | null;
       project: {
+        id: string;
         name: string;
         framework: string;
         nodeVersion: string;
         updatedAt: number;
-        latestDeployments: Array<{
-          id: string;
-          state: string;
-          createdAt: number;
-          url: string;
-        }>;
+        createdAt: number;
+        analytics: boolean;
+        speedInsights: boolean;
+        gitRepository: {
+          repo: string;
+          repoOwner: string;
+          type: string;
+        } | null;
       } | null;
+      deployments: Array<{
+        id: string;
+        name: string;
+        url: string;
+        state: string;
+        target: string;
+        createdAt: number;
+        buildingAt: number;
+        ready: number;
+        buildTime: number | null;
+        meta: {
+          githubCommitRef?: string;
+          githubCommitSha?: string;
+          githubCommitMessage?: string;
+        };
+      }>;
+      events: Array<{
+        id: string;
+        type: string;
+        text: string;
+        createdAt: number;
+        userId: string;
+      }>;
+      totalDeployments: number;
+      avgBuildTime: number;
       domains: Array<{
         name: string;
         verified: boolean;
+        configured: boolean;
       }>;
+      domainsCount: number;
     } | null;
   };
   cloudinary: {
@@ -36,6 +67,11 @@ export interface AdminMetrics {
     data: {
       plan: string;
       lastUpdated: string;
+      credits: {
+        used: number;
+        limit: number;
+        percentage: number;
+      };
       storage: {
         used: number;
         limit: number;
@@ -53,8 +89,18 @@ export interface AdminMetrics {
         limit: number;
         percentage: number;
       };
+      requests: number;
       resources: number;
       derivedResources: number;
+      mediaLimits: {
+        imageMaxSizeBytes: number;
+        videoMaxSizeBytes: number;
+        rawMaxSizeBytes: number;
+        imageMaxPixels: number;
+      };
+      objects: {
+        usage: number;
+      };
     } | null;
   };
   firebase: {
