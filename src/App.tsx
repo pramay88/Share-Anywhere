@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Send from "./pages/Send";
@@ -69,6 +70,7 @@ const App = () => (
           <Sonner />
           <AppContent />
           <Analytics />
+          <SpeedInsights />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
