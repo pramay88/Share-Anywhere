@@ -49,18 +49,33 @@ export const Header = () => {
         <header className="w-full py-3 px-4 sm:py-4 sm:px-6 md:px-12 flex justify-between items-center border-b">
 
             {/* Logo */}
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
-                <img src="/logo64.webp" alt="SA" className="h-5 w-5 sm:h-6 sm:w-6 object-contain" />
+            <button
+                type="button"
+                className="flex items-center gap-2 cursor-pointer"
+                onClick={() => navigate("/")}
+                aria-label="Go to ShareAnywhere home"
+            >
+                <img
+                    src="/logo64.webp"
+                    alt="ShareAnywhere logo"
+                    width={24}
+                    height={24}
+                    loading="eager"
+                    decoding="async"
+                    className="h-5 w-5 sm:h-6 sm:w-6 object-contain"
+                />
                 <span className="text-base sm:text-lg font-semibold">ShareAnywhere</span>
-            </div>
+            </button>
 
             {/* Center Navigation - Desktop */}
-            <nav className="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
+            <nav aria-label="Primary" className="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
                 {navItems.map((item) => (
                     <button
                         key={item.path}
+                        type="button"
                         onClick={() => navigate(item.path)}
-                        className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
+                        aria-label={`Open ${item.label}`}
                     >
                         {item.label}
                     </button>
@@ -75,6 +90,9 @@ export const Header = () => {
                     size="icon"
                     className="md:hidden h-9 w-9"
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+                    aria-controls="mobile-navigation-menu"
+                    aria-expanded={mobileMenuOpen}
                 >
                     {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </Button>
@@ -82,8 +100,9 @@ export const Header = () => {
                 {/* History - Desktop */}
                 {user && (
                     <button
+                        type="button"
                         onClick={() => navigate("/history")}
-                        className="hidden md:block text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                        className="hidden md:block text-sm font-medium text-foreground/80 hover:text-foreground transition-colors"
                     >
                         History
                     </button>
@@ -125,6 +144,7 @@ export const Header = () => {
                     </DropdownMenu>
                 ) : (
                     <Button
+                        type="button"
                         onClick={() => navigate("/auth")}
                         variant="outline"
                         size="sm"
@@ -137,16 +157,18 @@ export const Header = () => {
 
             {/* Mobile Navigation Menu */}
             {mobileMenuOpen && (
-                <div className="absolute top-full left-0 right-0 bg-background border-b md:hidden z-50 animate-in slide-in-from-top-2">
-                    <nav className="flex flex-col p-4 gap-1">
+                <div id="mobile-navigation-menu" className="absolute top-full left-0 right-0 bg-background border-b md:hidden z-50 animate-in slide-in-from-top-2">
+                    <nav aria-label="Mobile" className="flex flex-col p-4 gap-1">
                         {navItems.map((item) => (
                             <button
                                 key={item.path}
+                                type="button"
                                 onClick={() => {
                                     navigate(item.path);
                                     setMobileMenuOpen(false);
                                 }}
                                 className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                                aria-label={`Open ${item.label}`}
                             >
                                 <item.icon className="h-4 w-4" />
                                 {item.label}
@@ -154,6 +176,7 @@ export const Header = () => {
                         ))}
                         {user && (
                             <button
+                                type="button"
                                 onClick={() => {
                                     navigate("/history");
                                     setMobileMenuOpen(false);

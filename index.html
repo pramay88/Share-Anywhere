@@ -5,29 +5,71 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/webp" href="/logo64.webp" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ShareAnywhere - Instant File Sharing</title>
+  <title>ShareAnywhere - Instant File Sharing with QR and Temporary Links</title>
   <meta name="description"
-    content="Share files instantly and securely with QR codes and shareable links. Fast, free, and no signup required. Transfer files up to 50MB with end-to-end encryption." />
+    content="Share files instantly with QR codes, fast links, and temporary access. ShareAnywhere helps you send and receive files securely across devices without complex setup." />
   <meta name="keywords"
-    content="file sharing, send files, file transfer, QR code sharing, secure file transfer, free file sharing" />
+    content="ShareAnywhere, file sharing, send files online, QR code file transfer, temporary file links, secure file transfer" />
   <meta name="author" content="ShareAnywhere" />
   <meta name="theme-color" content="#3B82F6" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://share-anywhere.vercel.app/" />
+
+  <link rel="preconnect" href="https://www.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+  <link rel="dns-prefetch" href="https://www.googleapis.com" />
+  <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com" />
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="ShareAnywhere - Instant File Sharing" />
+  <meta property="og:title" content="ShareAnywhere - Instant File Sharing with QR and Temporary Links" />
   <meta property="og:description"
-    content="Share files instantly and securely with QR codes and shareable links. No signup required!" />
+    content="Send and receive files in seconds with QR code sharing and temporary download links." />
+  <meta property="og:url" content="https://share-anywhere.vercel.app/" />
+  <meta property="og:site_name" content="ShareAnywhere" />
   <meta property="og:image" content="/logo64.webp" />
+  <meta property="og:image:alt" content="ShareAnywhere logo" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="ShareAnywhere - Instant File Sharing" />
-  <meta name="twitter:description" content="Share files instantly and securely with QR codes and shareable links." />
+  <meta name="twitter:description" content="Fast file sharing with QR, short links, and temporary access." />
   <meta name="twitter:image" content="/logo64.webp" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ShareAnywhere",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Web",
+      "url": "https://share-anywhere.vercel.app/",
+      "description": "ShareAnywhere is a web app for instant file and text sharing using QR codes and temporary links.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    }
+  </script>
 </head>
 
 <body>
+  <noscript>
+    <main>
+      <h1>ShareAnywhere - Instant File Sharing</h1>
+      <p>ShareAnywhere lets you send and receive files quickly with share codes, QR scans, and temporary links.</p>
+      <h2>Key Features</h2>
+      <ul>
+        <li>Quick file and text sharing</li>
+        <li>QR code based transfer</li>
+        <li>Temporary links for safer sharing</li>
+      </ul>
+      <p>Enable JavaScript to use the interactive app experience.</p>
+    </main>
+  </noscript>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

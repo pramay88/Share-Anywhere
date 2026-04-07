@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from 'firebase/auth';
-import { onAuthChange, signOut as firebaseSignOut } from '@/integrations/firebase/auth';
+import type { User } from 'firebase/auth';
 
 interface AuthContextType {
     user: User | null;
@@ -15,16 +14,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthChange((user) => {
-            setUser(user);
-            setLoading(false);
-        });
+        let mounted = true;
+        let unsubscribe: (() => void) | undefined;
+        let timeoutId: number | undefined;
+        let idleId: number | undefined;
 
-        return unsubscribe;
+        const initAuth = async () => {
+            try {
+                const { onAuthChange } = await import('@/integrations/firebase/auth');
+                unsubscribe = onAuthChange((nextUser) => {
+                    if (!mounted) return;
+                    setUser(nextUser);
+                    setLoading(false);
+                });
+            } catch (error) {
+                console.error('Failed to initialize auth listener:', error);
+                if (mounted) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        if ('requestIdleCallback' in window) {
+            idleId = (window as Window & {
+                requestIdleCallback: (cb: IdleRequestCallback, options?: IdleRequestOptions) => number;
+            }).requestIdleCallback(() => {
+                void initAuth();
+            }, { timeout: 1200 });
+        } else {
+            timeoutId = window.setTimeout(() => {
+                void initAuth();
+            }, 300);
+        }
+
+        return () => {
+            mounted = false;
+
+            if (unsubscribe) {
+                unsubscribe();
+            }
+
+            if (typeof timeoutId === 'number') {
+                window.clearTimeout(timeoutId);
+            }
+
+            if (typeof idleId === 'number' && 'cancelIdleCallback' in window) {
+                (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
+            }
+        };
     }, []);
 
     const signOut = async () => {
         try {
+            const { signOut: firebaseSignOut } = await import('@/integrations/firebase/auth');
             await firebaseSignOut();
             setUser(null);
         } catch (error) {
