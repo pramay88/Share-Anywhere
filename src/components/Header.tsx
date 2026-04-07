@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,13 +9,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { LogOut, History, Menu, X, Send, Download, Wifi } from "lucide-react";
+import { LogOut, History } from "lucide-react";
 import { toast } from "sonner";
 
 export const Header = () => {
     const navigate = useNavigate();
     const { user, signOut } = useAuth();
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     const handleSignOut = async () => {
         try {
@@ -40,9 +38,9 @@ export const Header = () => {
     };
 
     const navItems = [
-        { label: "Send", path: "/send", icon: Send },
-        { label: "P2P Share", path: "/p2p", icon: Wifi },
-        { label: "Receive", path: "/receive", icon: Download },
+        { label: "Send", path: "/send" },
+        { label: "P2P Share", path: "/p2p" },
+        { label: "Receive", path: "/receive" },
     ];
 
     return (
@@ -82,21 +80,8 @@ export const Header = () => {
                 ))}
             </nav>
 
-            {/* Right - Auth & Mobile Menu */}
+            {/* Right - Auth */}
             <nav className="flex items-center gap-2 sm:gap-4">
-                {/* Mobile menu button */}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="md:hidden h-9 w-9"
-                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
-                    aria-controls="mobile-navigation-menu"
-                    aria-expanded={mobileMenuOpen}
-                >
-                    {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-                </Button>
-
                 {/* History - Desktop */}
                 {user && (
                     <button
@@ -155,41 +140,6 @@ export const Header = () => {
                 )}
             </nav>
 
-            {/* Mobile Navigation Menu */}
-            {mobileMenuOpen && (
-                <div id="mobile-navigation-menu" className="absolute top-full left-0 right-0 bg-background border-b md:hidden z-50 animate-in slide-in-from-top-2">
-                    <nav aria-label="Mobile" className="flex flex-col p-4 gap-1">
-                        {navItems.map((item) => (
-                            <button
-                                key={item.path}
-                                type="button"
-                                onClick={() => {
-                                    navigate(item.path);
-                                    setMobileMenuOpen(false);
-                                }}
-                                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                                aria-label={`Open ${item.label}`}
-                            >
-                                <item.icon className="h-4 w-4" />
-                                {item.label}
-                            </button>
-                        ))}
-                        {user && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    navigate("/history");
-                                    setMobileMenuOpen(false);
-                                }}
-                                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                            >
-                                <History className="h-4 w-4" />
-                                History
-                            </button>
-                        )}
-                    </nav>
-                </div>
-            )}
         </header>
     );
 };
