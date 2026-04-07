@@ -50,7 +50,7 @@ export const Header = () => {
 
             {/* Logo */}
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
-                <img src="/logo.png" alt="SA" className="h-5 w-5 sm:h-6 sm:w-6 object-contain" />
+                <img src="/logo64.webp" alt="SA" className="h-5 w-5 sm:h-6 sm:w-6 object-contain" />
                 <span className="text-base sm:text-lg font-semibold">ShareAnywhere</span>
             </div>
 
