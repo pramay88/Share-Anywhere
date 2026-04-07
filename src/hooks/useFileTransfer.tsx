@@ -55,6 +55,9 @@ export const useFileTransfer = () => {
     expiresInHours?: number
   ): Promise<{ shareCode: string; transferId: string } | null> => {
     const startedAt = Date.now();
+    let codeGenToastId: string | number | undefined;
+    let uploadProgressToastId: string | number | undefined;
+
     try {
       // Check if offline
       if (isOffline()) {
@@ -127,9 +130,17 @@ export const useFileTransfer = () => {
           maxAttempts: 3,
           delayMs: 1000,
           onRetry: (attempt) => {
-            toast.loading(`Generating code (attempt ${attempt})...`);
+            if (codeGenToastId !== undefined) {
+              toast.dismiss(codeGenToastId);
+            }
+            codeGenToastId = toast.loading(`Generating code (attempt ${attempt})...`);
           },
         });
+
+        // Clear code generation toast if it exists
+        if (codeGenToastId !== undefined) {
+          toast.dismiss(codeGenToastId);
+        }
       }
 
       // Calculate expiration
@@ -158,6 +169,7 @@ export const useFileTransfer = () => {
         const file = files[i];
 
         // Upload to Cloudinary with retry
+        let uploadRetryToastId: string | number | undefined;
         const uploadFile = async () => {
           return await uploadToCloudinary(
             file,
@@ -175,12 +187,20 @@ export const useFileTransfer = () => {
             maxAttempts: 3,
             delayMs: 2000,
             onRetry: (attempt) => {
-              toast.loading(`Retrying upload for "${file.name}" (attempt ${attempt})...`);
+              if (uploadRetryToastId !== undefined) {
+                toast.dismiss(uploadRetryToastId);
+              }
+              uploadRetryToastId = toast.loading(`Retrying upload for "${file.name}" (attempt ${attempt})...`);
             },
           }),
           120000, // 2 minute timeout per file
           `Upload timed out for "${file.name}". Please try again.`
         );
+
+        // Dismiss retry toast if shown
+        if (uploadRetryToastId !== undefined) {
+          toast.dismiss(uploadRetryToastId);
+        }
 
         // Add file record to Firestore with retry
         const addFileRecord = async () => {
@@ -204,10 +224,17 @@ export const useFileTransfer = () => {
 
         // Show progress toast
         if (i < totalFiles - 1) {
-          toast.loading(`Uploading... ${i + 1}/${totalFiles} files (${progress}%)`);
+          if (uploadProgressToastId !== undefined) {
+            toast.dismiss(uploadProgressToastId);
+          }
+          uploadProgressToastId = toast.loading(`Uploading... ${i + 1}/${totalFiles} files (${progress}%)`);
         }
       }
 
+      // Clear progress toast before showing success
+      if (uploadProgressToastId !== undefined) {
+        toast.dismiss(uploadProgressToastId);
+      }
       toast.success(`Successfully uploaded ${totalFiles} file(s)!`);
 
       const durationMs = Date.now() - startedAt;
@@ -229,6 +256,14 @@ export const useFileTransfer = () => {
 
       return { shareCode, transferId };
     } catch (error: any) {
+      // Clear any remaining toasts before showing error
+      if (uploadProgressToastId !== undefined) {
+        toast.dismiss(uploadProgressToastId);
+      }
+      if (codeGenToastId !== undefined) {
+        toast.dismiss(codeGenToastId);
+      }
+
       const user = getCurrentUser();
       fireAndForgetTransferEvent(user?.uid, {
         transferType: 'internet',
@@ -254,6 +289,8 @@ export const useFileTransfer = () => {
     expiresInHours?: number
   ): Promise<{ shareCode: string; transferId: string } | null> => {
     const startedAt = Date.now();
+    let codeGenToastId: string | number | undefined;
+
     try {
       // Check if offline
       if (isOffline()) {
@@ -329,9 +366,17 @@ export const useFileTransfer = () => {
           maxAttempts: 3,
           delayMs: 1000,
           onRetry: (attempt) => {
-            toast.loading(`Generating code (attempt ${attempt})...`);
+            if (codeGenToastId !== undefined) {
+              toast.dismiss(codeGenToastId);
+            }
+            codeGenToastId = toast.loading(`Generating code (attempt ${attempt})...`);
           },
         });
+
+        // Clear code generation toast if it exists
+        if (codeGenToastId !== undefined) {
+          toast.dismiss(codeGenToastId);
+        }
       }
 
       // Calculate expiration
@@ -394,6 +439,10 @@ export const useFileTransfer = () => {
 
       return { shareCode, transferId };
     } catch (error: any) {
+      if (codeGenToastId !== undefined) {
+        toast.dismiss(codeGenToastId);
+      }
+
       const user = getCurrentUser();
       fireAndForgetTransferEvent(user?.uid, {
         transferType: 'internet',
@@ -465,6 +514,8 @@ export const useFileTransfer = () => {
     originalName: string
   ) => {
     const startedAt = Date.now();
+    let toastId: string | number | undefined;
+    
     try {
       // Check if offline
       if (isOffline()) {
@@ -472,7 +523,7 @@ export const useFileTransfer = () => {
         return;
       }
 
-      toast.loading(`Downloading "${originalName}"...`);
+      toastId = toast.loading(`Downloading "${originalName}"...`);
 
       // Log the download with retry
       const logDownloadRecord = async () => {
@@ -507,7 +558,10 @@ export const useFileTransfer = () => {
           maxAttempts: 3,
           delayMs: 2000,
           onRetry: (attempt) => {
-            toast.loading(`Retrying download (attempt ${attempt})...`);
+            if (toastId !== undefined) {
+              toast.dismiss(toastId);
+            }
+            toastId = toast.loading(`Retrying download (attempt ${attempt})...`);
           },
         }),
         60000, // 60 second timeout
@@ -524,6 +578,10 @@ export const useFileTransfer = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      // Dismiss loading toast and show success
+      if (toastId !== undefined) {
+        toast.dismiss(toastId);
+      }
       toast.success(`Downloaded: ${originalName}`);
 
       const user = getCurrentUser();
@@ -541,6 +599,11 @@ export const useFileTransfer = () => {
         retries: 0,
       });
     } catch (error: any) {
+      // Dismiss loading toast before showing error
+      if (toastId !== undefined) {
+        toast.dismiss(toastId);
+      }
+
       const user = getCurrentUser();
       fireAndForgetTransferEvent(user?.uid, {
         transferId,
