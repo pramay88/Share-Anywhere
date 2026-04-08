@@ -20,6 +20,7 @@ const P2PShare = lazy(() => import("./pages/P2PShare"));
 const Auth = lazy(() => import("./pages/Auth"));
 const History = lazy(() => import("./pages/History"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Analytics = lazy(() => import("./pages/Analytics"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const RouteFallback = () => (
@@ -128,6 +129,11 @@ const AppContent = () => {
           <Route path="/admin" element={
             <AdminProtectedRoute>
               <Admin />
+            </AdminProtectedRoute>
+          } />
+          <Route path="/admin/analytics" element={
+            <AdminProtectedRoute>
+              <Analytics />
             </AdminProtectedRoute>
           } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

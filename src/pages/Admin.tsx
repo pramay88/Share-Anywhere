@@ -1,9 +1,10 @@
 import { useAdminMetrics } from '@/hooks/useAdminMetrics';
 import { formatDistanceToNow } from 'date-fns';
+import { Link } from 'react-router-dom';
 import { 
   Activity, AlertTriangle, BarChart3, CheckCircle2, Clock, Cloud, Database,
   ExternalLink, FileText, Globe, HardDrive, Image, Loader2, RefreshCw,
-  Server, Settings, Users, Video, XCircle, Zap, GitBranch, Package
+  Server, Settings, Users, Video, XCircle, Zap, GitBranch, Package, TrendingUp
 } from 'lucide-react';
 
 const formatBytes = (bytes: number): string => {
@@ -269,6 +270,9 @@ export default function Admin() {
 
           <Section icon={ExternalLink} title="Quick Links">
             <div className="space-y-1">
+              <Link to="/admin/analytics" className="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 font-medium">
+                <TrendingUp className="w-3 h-3" /> Analytics & Search Console
+              </Link>
               {[
                 { href: 'https://vercel.com/dashboard', icon: Server, label: 'Vercel' },
                 { href: 'https://console.firebase.google.com', icon: Database, label: 'Firebase' },

@@ -35,3 +35,7 @@ supabase/config.toml
 # Firebase helper scripts (contain credentials)
 encode-firebase-key.ps1
 encode-service-account.js
+
+# Service account keys (never commit!)
+sendanywhere-7e45d-*.json
+*-service-account*.json
