@@ -28,6 +28,13 @@ firebase-debug.log
 .next
 
 .env
+.env
+.env.*
+*.env
+.env.local
+.env.vercel
+.env.old
+
 /node_modules
 supabase/config.toml
 .vercel

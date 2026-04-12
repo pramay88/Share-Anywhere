@@ -44,7 +44,7 @@ export function getFirebaseAdmin(): admin.app.App {
 
         app = admin.initializeApp({
             credential: admin.credential.cert(credentials),
-            storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+            storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
         });
 
         console.log('✅ Firebase Admin SDK initialized successfully');
