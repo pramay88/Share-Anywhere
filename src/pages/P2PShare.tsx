@@ -51,6 +51,8 @@ const P2PShare = () => {
     // AbortController so the user can cancel an in-progress transfer
     const transferAbortRef = useRef<AbortController | null>(null);
     const queryJoinAttemptedRef = useRef(false);
+    const queryJoinRetryCountRef = useRef(0);
+    const queryJoinRetryTimerRef = useRef<number | null>(null);
 
     const {
         role,
@@ -203,17 +205,18 @@ const P2PShare = () => {
     // RECEIVE FLOW
     // ========================================================================
 
-    const handleJoin = async () => {
+    const handleJoin = useCallback(async (showErrorToast = true): Promise<boolean> => {
         const normalizedCode = receiveCode.trim().toUpperCase();
         if (normalizedCode.length !== 6) {
-            toast.error('Please enter a 6-character share code');
-            return;
+            if (showErrorToast) toast.error('Please enter a 6-character share code');
+            return false;
         }
         const success = await joinSession(normalizedCode);
-        if (!success) {
+        if (!success && showErrorToast) {
             toast.error(sessionError || 'Failed to join session');
         }
-    };
+        return success;
+    }, [receiveCode, joinSession, sessionError]);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -222,6 +225,13 @@ const P2PShare = () => {
             setMode('receive');
             setReceiveCode(codeFromQuery);
         }
+
+        return () => {
+            if (queryJoinRetryTimerRef.current !== null) {
+                window.clearTimeout(queryJoinRetryTimerRef.current);
+                queryJoinRetryTimerRef.current = null;
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -235,8 +245,30 @@ const P2PShare = () => {
         if (codeFromQuery !== receiveCode) return;
 
         queryJoinAttemptedRef.current = true;
-        void handleJoin();
-    }, [mode, receiveCode, status]);
+        void (async () => {
+            const maxRetries = 4;
+            const retryDelayMs = 1500;
+
+            const firstAttemptOk = await handleJoin(false);
+            if (firstAttemptOk) return;
+
+            // Production race guard: if receiver opens a just-created link,
+            // Firestore write may not be visible immediately. Retry briefly.
+            while (queryJoinRetryCountRef.current < maxRetries) {
+                queryJoinRetryCountRef.current += 1;
+                await new Promise<void>((resolve) => {
+                    queryJoinRetryTimerRef.current = window.setTimeout(() => resolve(), retryDelayMs);
+                });
+
+                if (status !== 'idle') return;
+
+                const ok = await handleJoin(false);
+                if (ok) return;
+            }
+
+            toast.error(sessionError || 'Session not found or expired. Ask sender to regenerate code.');
+        })();
+    }, [mode, receiveCode, status, handleJoin, sessionError]);
 
     const handleAccept = async () => {
         if (!pendingTransfer) return;
