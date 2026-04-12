@@ -5,22 +5,28 @@ import admin from 'firebase-admin';
  * Safely initialize Firebase Admin
  */
 function getDb() {
-    if (!admin.apps.length) {
+    try {
+        if (admin.apps.length) {
+            return admin.firestore();
+        }
         const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
         if (!serviceAccountKey) {
-            return null;
+            throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY is not set');
         }
         try {
-            const credentials = JSON.parse(Buffer.from(serviceAccountKey, 'base64').toString());
+            const decoded = Buffer.from(serviceAccountKey, 'base64').toString('utf-8');
+            const credentials = JSON.parse(decoded);
             admin.initializeApp({
                 credential: admin.credential.cert(credentials),
             });
-        } catch (e) {
-            console.error('Firebase init error:', e);
-            return null;
+        } catch (parseErr) {
+            throw new Error(`Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY: ${parseErr.message}`);
         }
+        return admin.firestore();
+    } catch (e) {
+        console.error('[P2P Delete] Firebase init error:', e.message);
+        throw e;
     }
-    return admin.firestore();
 }
 
 export default async function handler(req, res) {

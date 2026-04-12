@@ -8,31 +8,29 @@ const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
  */
 function getDb() {
     try {
-        if (!admin.apps.length) {
-            const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-            if (!serviceAccountKey) {
-                return { db: null, error: 'FIREBASE_SERVICE_ACCOUNT_KEY env var is empty or missing' };
-            }
-
-            let credentials;
-            try {
-                const decoded = Buffer.from(serviceAccountKey, 'base64').toString('utf-8');
-                credentials = JSON.parse(decoded);
-            } catch (parseErr) {
-                try {
-                    credentials = JSON.parse(serviceAccountKey);
-                } catch (rawErr) {
-                    return { db: null, error: `Failed to parse key: ${parseErr.message}` };
-                }
-            }
-
-            admin.initializeApp({
-                credential: admin.credential.cert(credentials),
-            });
+        if (admin.apps.length) {
+            return { db: admin.firestore(), error: null };
         }
+        const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+        if (!serviceAccountKey) {
+            return { db: null, error: 'FIREBASE_SERVICE_ACCOUNT_KEY env var is not set' };
+        }
+
+        let credentials;
+        try {
+            const decoded = Buffer.from(serviceAccountKey, 'base64').toString('utf-8');
+            credentials = JSON.parse(decoded);
+        } catch (parseErr) {
+            return { db: null, error: `Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY: ${parseErr.message}` };
+        }
+
+        admin.initializeApp({
+            credential: admin.credential.cert(credentials),
+        });
         return { db: admin.firestore(), error: null };
     } catch (e) {
-        return { db: null, error: `Firebase init exception: ${e.message}` };
+        console.error('[P2P Join] Firebase init error:', e.message);
+        return { db: null, error: `Firebase init failed: ${e.message}` };
     }
 }
 
