@@ -43,6 +43,11 @@ export async function uploadToCloudinary(
     formData.append('quality', 'auto');
     formData.append('fetch_format', 'auto');
 
+    const fileName = file instanceof File ? file.name : '';
+    const mimeType = (file as any)?.type || '';
+    const isPdf = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+    const uploadResourceType = isPdf ? 'raw' : 'auto';
+
     let startTime = Date.now();
     let lastLoaded = 0;
 
@@ -94,7 +99,7 @@ export async function uploadToCloudinary(
 
         xhr.open(
             'POST',
-            `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/auto/upload`
+            `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/${uploadResourceType}/upload`
         );
         xhr.send(formData);
     });

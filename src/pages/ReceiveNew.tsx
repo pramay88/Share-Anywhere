@@ -47,7 +47,9 @@ const ReceiveContent = () => {
         transfer.transfer.id,
         file.id,
         file.cloudinary_url,
-        file.original_name
+        file.original_name,
+        file.cloudinary_public_id,
+        file.mime_type
       );
     }
   };
@@ -58,7 +60,9 @@ const ReceiveContent = () => {
       transfer.transfer.id,
       file.id,
       file.cloudinary_url,
-      file.original_name
+      file.original_name,
+      file.cloudinary_public_id,
+      file.mime_type
     );
   };
 

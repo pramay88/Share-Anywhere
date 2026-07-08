@@ -22,7 +22,7 @@ import {
   getTransferByCode,
   logDownload,
 } from '@/integrations/firebase/firestore';
-import { uploadToCloudinary, getCloudinaryUrl } from '@/integrations/cloudinary/config';
+import { uploadToCloudinary } from '@/integrations/cloudinary/config';
 import { getCurrentUser } from '@/integrations/firebase/auth';
 import { apiClient } from '@/lib/api/client';
 
@@ -43,6 +43,29 @@ function fireAndForgetTransferEvent(userId: string | null | undefined, event: Re
   void apiClient.trackAnonymousTransferEvent(payload).catch(() => {
     // Intentionally ignored to keep transfer path non-blocking.
   });
+}
+
+function getPdfSafeCloudinaryUrl(
+  cloudinaryUrl: string,
+  mimeType?: string,
+  originalName?: string
+): { primaryUrl: string; fallbackUrl: string | null; isPdf: boolean } {
+  const isPdf = mimeType === 'application/pdf' || originalName?.toLowerCase().endsWith('.pdf');
+  if (!isPdf) {
+    return { primaryUrl: cloudinaryUrl, fallbackUrl: null, isPdf: false };
+  }
+
+  // Keep original URL as primary (works for many existing uploads), and only
+  // retry with raw/upload when image/upload is rejected for PDFs.
+  const fallbackUrl = cloudinaryUrl.includes('/image/upload/')
+    ? cloudinaryUrl.replace('/image/upload/', '/raw/upload/')
+    : null;
+
+  return { primaryUrl: cloudinaryUrl, fallbackUrl, isPdf: true };
+}
+
+function isPdfFile(mimeType?: string, originalName?: string): boolean {
+  return mimeType === 'application/pdf' || originalName?.toLowerCase().endsWith('.pdf') === true;
 }
 
 export const useFileTransfer = () => {
@@ -511,7 +534,9 @@ export const useFileTransfer = () => {
     transferId: string,
     fileId: string,
     cloudinaryUrl: string,
-    originalName: string
+    originalName: string,
+    cloudinaryPublicId?: string,
+    mimeType?: string
   ) => {
     const startedAt = Date.now();
     let toastId: string | number | undefined;
@@ -541,32 +566,136 @@ export const useFileTransfer = () => {
         console.warn('Failed to log download:', logError);
       }
 
-      // Use the stored Cloudinary URL directly
-      const downloadUrl = cloudinaryUrl;
+      // PDFs can be blocked on direct public Cloudinary URLs depending on
+      // account delivery restrictions. Use backend-signed legacy endpoint.
+      if (isPdfFile(mimeType, originalName)) {
+        let pdfBlob: Blob;
+        try {
+          const proxyDownloadUrl = `/api/transfers/${encodeURIComponent(transferId)}/files/${encodeURIComponent(fileId)}/download`;
+          const pdfResponse = await withTimeout(
+            retryWithBackoff(async () => {
+              const response = await fetch(proxyDownloadUrl);
+              if (!response.ok) {
+                throw new Error(`PDF download failed with status ${response.status}`);
+              }
+              return response;
+            }, {
+              maxAttempts: 2,
+              delayMs: 1500,
+            }),
+            45000,
+            `PDF download timed out for "${originalName}". Please try again.`
+          );
+          pdfBlob = await pdfResponse.blob();
+        } catch {
+          // If backend proxy cannot sign/fetch PDFs in this environment,
+          // fallback to direct Cloudinary URL variants.
+          const downloadUrl = getPdfSafeCloudinaryUrl(
+            cloudinaryUrl,
+            mimeType,
+            originalName
+          );
+          try {
+            pdfBlob = await withTimeout(
+              retryWithBackoff(() => fetch(downloadUrl.primaryUrl).then((response) => {
+                if (!response.ok) throw new Error(`PDF direct download failed with status ${response.status}`);
+                return response.blob();
+              }), {
+                maxAttempts: 2,
+                delayMs: 1200,
+              }),
+              45000,
+              `PDF download timed out for "${originalName}". Please try again.`
+            );
+          } catch {
+            if (!downloadUrl.fallbackUrl) throw new Error('PDF download failed');
+            pdfBlob = await withTimeout(
+              retryWithBackoff(() => fetch(downloadUrl.fallbackUrl as string).then((response) => {
+                if (!response.ok) throw new Error(`PDF fallback download failed with status ${response.status}`);
+                return response.blob();
+              }), {
+                maxAttempts: 2,
+                delayMs: 1200,
+              }),
+              45000,
+              `PDF fallback timed out for "${originalName}". Please try again.`
+            );
+          }
+        }
+
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = pdfUrl;
+        a.download = originalName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(pdfUrl);
+
+        if (toastId !== undefined) {
+          toast.dismiss(toastId);
+        }
+        toast.success(`Downloaded: ${originalName}`);
+        return;
+      }
+
+      const downloadUrl = getPdfSafeCloudinaryUrl(
+        cloudinaryUrl,
+        mimeType,
+        originalName
+      );
 
       // Download file
-      const downloadFileData = async () => {
-        const response = await fetch(downloadUrl);
+      const downloadFileData = async (url: string) => {
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error(`Download failed with status ${response.status}`);
         }
         return await response.blob();
       };
 
-      const blob = await withTimeout(
-        retryWithBackoff(downloadFileData, {
-          maxAttempts: 3,
-          delayMs: 2000,
-          onRetry: (attempt) => {
-            if (toastId !== undefined) {
-              toast.dismiss(toastId);
-            }
-            toastId = toast.loading(`Retrying download (attempt ${attempt})...`);
-          },
-        }),
-        60000, // 60 second timeout
-        `Download timed out for "${originalName}". Please try again.`
-      );
+      let downloadedSize = 0;
+      let downloadedType = 'application/octet-stream';
+
+      let blob: Blob;
+      try {
+        blob = await withTimeout(
+          retryWithBackoff(() => downloadFileData(downloadUrl.primaryUrl), {
+            maxAttempts: 3,
+            delayMs: 2000,
+            onRetry: (attempt) => {
+              if (toastId !== undefined) {
+                toast.dismiss(toastId);
+              }
+              toastId = toast.loading(`Retrying download (attempt ${attempt})...`);
+            },
+          }),
+          60000, // 60 second timeout
+          `Download timed out for "${originalName}". Please try again.`
+        );
+      } catch (primaryError: any) {
+        const canTryPdfFallback =
+          downloadUrl.isPdf &&
+          downloadUrl.fallbackUrl &&
+          (primaryError?.message?.includes('status 401') || primaryError?.message?.includes('status 404'));
+
+        if (!canTryPdfFallback) {
+          throw primaryError;
+        }
+
+        blob = await withTimeout(
+          retryWithBackoff(() => downloadFileData(downloadUrl.fallbackUrl as string), {
+            maxAttempts: 2,
+            delayMs: 1500,
+          }),
+          45000,
+          `PDF fallback download timed out for "${originalName}". Please try again.`
+        );
+      }
+
+      downloadedSize = blob.size;
+      downloadedType = blob.type || downloadedType;
 
       // Create download link
       const url = URL.createObjectURL(blob);
@@ -591,9 +720,9 @@ export const useFileTransfer = () => {
         direction: 'receive',
         status: 'success',
         fileName: originalName,
-        fileType: blob.type || 'application/octet-stream',
-        fileSize: blob.size,
-        totalBytes: blob.size,
+        fileType: downloadedType,
+        fileSize: downloadedSize,
+        totalBytes: downloadedSize,
         durationMs: Date.now() - startedAt,
         speedBytesPerSec: 0,
         retries: 0,
