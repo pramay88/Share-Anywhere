@@ -33,8 +33,10 @@ const ReceiveContent = () => {
 
   const [transfer, setTransfer] = useState<TransferDetails | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const urlCode = searchParams.get("code") ?? "";
 
   const handleConnect = useCallback(async () => {
+    if (transfer || isConnecting) return;
     if (code.length < 6) {
       toast.error("Please enter a valid code (at least 6 characters)");
       return;
@@ -48,13 +50,17 @@ const ReceiveContent = () => {
       setTransfer(transferData as TransferDetails);
       toast.success("Transfer found! Files are ready to download");
     }
-  }, [code, getTransferByShareCode]);
+  }, [code, getTransferByShareCode, isConnecting, transfer]);
 
   useEffect(() => {
-    if (searchParams.get("code")) {
-      void handleConnect();
+    if (!urlCode) return;
+    if (code !== urlCode) {
+      setCode(urlCode);
+      return;
     }
-  }, [handleConnect, searchParams]);
+    if (transfer || isConnecting) return;
+    void handleConnect();
+  }, [code, handleConnect, isConnecting, transfer, urlCode]);
 
   const handleDownloadAll = async () => {
     if (!transfer) return;
