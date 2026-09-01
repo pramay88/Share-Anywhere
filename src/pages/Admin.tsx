@@ -15,6 +15,33 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
+type DeploymentRecord = {
+  id: string;
+  target?: string;
+  state: string;
+  meta?: { sha?: string; branch?: string };
+  buildTime?: number;
+  createdAt: string | number | Date;
+};
+
+type ActivityRecord = {
+  id: string;
+  text: string;
+  createdAt: string | number | Date;
+};
+
+type DomainRecord = {
+  name: string;
+  verified?: boolean;
+};
+
+type TransferRecord = {
+  id: string;
+  fileCount?: number;
+  totalSize?: number;
+  createdAt?: string | number | Date;
+};
+
 const StatusBadge = ({ status }: { status: string }) => {
   const colors: Record<string, string> = {
     READY: 'bg-green-100 text-green-700',
@@ -129,7 +156,7 @@ export default function Admin() {
         <div className="flex flex-col gap-3 min-h-0">
           <Section icon={Server} title="Deployments" link="https://vercel.com/dashboard">
             <div className="space-y-1.5 overflow-auto max-h-48 lg:max-h-[calc(100%-24px)]">
-              {v?.deployments?.slice(0, 4).map((d: any) => (
+              {v?.deployments?.slice(0, 4).map((d: DeploymentRecord) => (
                 <div key={d.id} className="flex items-center gap-1.5 py-1 border-b border-gray-50 last:border-0">
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${d.target === 'production' ? 'bg-green-500' : 'bg-blue-400'}`} />
                   <div className="flex-1 min-w-0">
@@ -138,7 +165,7 @@ export default function Admin() {
                       <span className="text-[10px] text-gray-400">→</span>
                       <span className="text-[11px] text-gray-500 truncate">{d.meta?.branch}</span>
                     </div>
-                    <div className="text-[10px] text-gray-400">{d.buildTime ? `${d.buildTime}s` : '—'} • {formatDistanceToNow(d.createdAt)}</div>
+                    <div className="text-[10px] text-gray-400">{d.buildTime ? `${d.buildTime}s` : '—'} • {formatDistanceToNow(new Date(d.createdAt))}</div>
                   </div>
                   <StatusBadge status={d.state} />
                 </div>
@@ -148,10 +175,10 @@ export default function Admin() {
 
           <Section icon={Activity} title="Activity">
             <div className="space-y-1.5 overflow-auto max-h-32 lg:max-h-[calc(100%-24px)]">
-              {v?.recentActivity?.slice(0, 3).map((a: any) => (
+              {v?.recentActivity?.slice(0, 3).map((a: ActivityRecord) => (
                 <div key={a.id} className="py-1 border-b border-gray-50 last:border-0">
                   <p className="text-[11px] text-gray-600 line-clamp-1">{a.text}</p>
-                  <p className="text-[10px] text-gray-400">{formatDistanceToNow(a.createdAt)} ago</p>
+                  <p className="text-[10px] text-gray-400">{formatDistanceToNow(new Date(a.createdAt))} ago</p>
                 </div>
               )) || <p className="text-[11px] text-gray-400">No activity</p>}
             </div>
@@ -184,7 +211,7 @@ export default function Admin() {
 
           <Section icon={Globe} title="Domains">
             <div className="space-y-1">
-              {v?.domains?.map((d: any) => (
+              {v?.domains?.map((d: DomainRecord) => (
                 <div key={d.name} className="flex items-center justify-between">
                   <span className="text-[11px] font-mono text-gray-700 truncate">{d.name}</span>
                   {d.verified ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Clock className="w-3 h-3 text-yellow-500" />}
@@ -256,11 +283,11 @@ export default function Admin() {
 
           <Section icon={HardDrive} title="Recent Transfers">
             <div className="space-y-1 overflow-auto max-h-32 lg:max-h-[calc(100%-24px)]">
-              {f?.recentTransfers?.slice(0, 4).map((t: any) => (
+              {f?.recentTransfers?.slice(0, 4).map((t: TransferRecord) => (
                 <div key={t.id} className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0">
                   <div>
                     <div className="text-[11px] font-mono text-gray-700">{t.id.slice(0, 8)}</div>
-                    <div className="text-[10px] text-gray-400">{t.fileCount} files • {formatBytes(t.totalSize)}</div>
+                    <div className="text-[10px] text-gray-400">{t.fileCount ?? 0} files • {formatBytes(t.totalSize ?? 0)}</div>
                   </div>
                   <div className="text-[10px] text-gray-400">{t.createdAt ? formatDistanceToNow(new Date(t.createdAt)) : '—'}</div>
                 </div>

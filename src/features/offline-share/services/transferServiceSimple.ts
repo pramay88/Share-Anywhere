@@ -107,6 +107,10 @@ export async function sendFileSimple(
 /**
  * Wait for accept/reject response
  */
+function isTransferMessage(value: unknown): value is TransferMessage {
+    return typeof value === 'object' && value !== null && 'type' in value && 'transferId' in value;
+}
+
 function waitForResponse(connection: DataConnection, transferId: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -114,8 +118,12 @@ function waitForResponse(connection: DataConnection, transferId: string): Promis
             reject(new Error('Response timeout - no answer from receiver'));
         }, 30000); // 30 second timeout
 
-        const handler = (data: any) => {
-            const message = data as TransferMessage;
+        const handler = (data: unknown) => {
+            if (!isTransferMessage(data)) {
+                return;
+            }
+
+            const message = data;
 
             if (message.transferId === transferId) {
                 if (message.type === 'accept') {
@@ -158,8 +166,12 @@ export function listenForTransferRequest(
 ): void {
     console.log('👂 Listening for transfer requests...');
 
-    connection.on('data', (data: any) => {
-        const message = data as TransferMessage;
+    connection.on('data', (data: unknown) => {
+        if (!isTransferMessage(data)) {
+            return;
+        }
+
+        const message = data;
 
         if (message.type === 'request' && message.metadata) {
             console.log(`📥 Transfer request received: ${message.metadata.name}`);
@@ -213,8 +225,12 @@ export async function receiveFileSimple(
         const startTime = Date.now();
         let chunksReceived = 0;
 
-        const handler = (data: any) => {
-            const message = data as TransferMessage;
+        const handler = (data: unknown) => {
+            if (!isTransferMessage(data)) {
+                return;
+            }
+
+            const message = data;
 
             if (message.transferId !== pending.transferId) return;
 
@@ -238,7 +254,7 @@ export async function receiveFileSimple(
                         }
                         break;
 
-                    case 'complete':
+                    case 'complete': {
                         pending.connection.off('data', handler);
 
                         // Combine all chunks
@@ -246,11 +262,13 @@ export async function receiveFileSimple(
                         console.log('✅ File received successfully');
                         resolve(blob);
                         break;
+                    }
 
-                    case 'error':
+                    case 'error': {
                         pending.connection.off('data', handler);
                         reject(new Error(message.error || 'Transfer error'));
                         break;
+                    }
                 }
             } catch (error) {
                 pending.connection.off('data', handler);

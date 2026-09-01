@@ -65,11 +65,11 @@ const P2PShare = () => {
         disconnect,
     } = useP2PSession();
 
-    const trackEvent = useCallback((event: Record<string, any>) => {
-        const payload = {
+    const trackEvent = useCallback((event: Record<string, string | number | boolean | null | undefined>) => {
+        const payload: Record<string, string | number | boolean | null | undefined> = {
             ...event,
             transferType: 'p2p',
-            is_ephemeral: event?.is_ephemeral === true,
+            is_ephemeral: event.is_ephemeral === true,
             clientTimestamp: new Date().toISOString(),
         };
 
@@ -144,14 +144,7 @@ const P2PShare = () => {
     };
 
     // Auto-send when receiver connects (sender side)
-    useEffect(() => {
-        if (connection && mode === 'send' && transferState === 'sharing' && selectedFiles.length > 0) {
-            handleSend();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [connection]);
-
-    const handleSend = async () => {
+    const handleSend = useCallback(async () => {
         if (!connection || selectedFiles.length === 0) return;
 
         const startedAt = Date.now();
@@ -182,24 +175,31 @@ const P2PShare = () => {
                 speedBytesPerSec,
                 retries: 0,
             });
-        } catch (err: any) {
-            if (err?.name === 'AbortError') return; // user cancelled, no toast
+        } catch (err: unknown) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             console.error('Send failed:', err);
+            const message = err instanceof Error ? err.message : 'Transfer failed';
             setTransferState('error');
-            setErrorMessage(err.message || 'Transfer failed');
-            toast.error(err.message || 'Transfer failed');
+            setErrorMessage(message);
+            toast.error(message);
             trackEvent({
                 transferId,
                 shareCode,
                 direction: 'send',
                 status: 'failed',
-                error: err.message || 'Transfer failed',
+                error: message,
                 durationMs: Date.now() - startedAt,
             });
         } finally {
             transferAbortRef.current = null;
         }
-    };
+    }, [connection, progress, selectedFiles, shareCode, trackEvent]);
+
+    useEffect(() => {
+        if (connection && mode === 'send' && transferState === 'sharing' && selectedFiles.length > 0) {
+            void handleSend();
+        }
+    }, [connection, handleSend, mode, selectedFiles.length, transferState]);
 
     // ========================================================================
     // RECEIVE FLOW
@@ -305,18 +305,19 @@ const P2PShare = () => {
                 speedBytesPerSec,
                 retries: 0,
             });
-        } catch (err: any) {
-            if (err?.name === 'AbortError') return;
+        } catch (err: unknown) {
+            if (err instanceof Error && err.name === 'AbortError') return;
             console.error('Receive failed:', err);
+            const message = err instanceof Error ? err.message : 'Receive failed';
             setTransferState('error');
-            setErrorMessage(err.message || 'Transfer failed');
-            toast.error(err.message || 'Receive failed');
+            setErrorMessage(message);
+            toast.error(message);
             trackEvent({
                 shareCode,
                 transferId: acceptedTransfer.transferId,
                 direction: 'receive',
                 status: 'failed',
-                error: err.message || 'Receive failed',
+                error: message,
                 durationMs: Date.now() - startedAt,
             });
         } finally {
@@ -449,7 +450,7 @@ const P2PShare = () => {
                                     type="file"
                                     onChange={handleFolderSelect}
                                     className="hidden"
-                                    {...{ webkitdirectory: '', directory: '' } as any}
+                                    {...({ webkitdirectory: '', directory: '' } as const)}
                                 />
 
                                 <Card className="p-4 sm:p-6 border-dashed border-2 text-center">

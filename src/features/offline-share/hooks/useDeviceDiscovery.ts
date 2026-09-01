@@ -50,7 +50,7 @@ export function useDeviceDiscovery(): UseDeviceDiscoveryReturn {
                     name: deviceName,
                     status: 'online',
                     networkFingerprint,
-                    lastSeen: new Date() as any,
+                    lastSeen: new Date(),
                 });
 
                 setIsRegistered(true);
@@ -70,7 +70,7 @@ export function useDeviceDiscovery(): UseDeviceDiscoveryReturn {
                 setIsLoading(false);
             } catch (err) {
                 console.error('Failed to initialize device discovery:', err);
-                setError(err as Error);
+                setError(err instanceof Error ? err : new Error(String(err)));
                 setIsLoading(false);
                 toast.error('Failed to initialize device discovery');
             }

@@ -80,7 +80,7 @@ export async function createTransfer(
     textMetadata?: { character_count: number; language_hint?: string }
 ): Promise<string> {
     const transfersRef = collection(db, 'transfers');
-    const transferData: any = {
+    const transferData: Record<string, unknown> = {
         owner_id: ownerId,
         share_code: shareCode.toUpperCase(),
         content_type: contentType,

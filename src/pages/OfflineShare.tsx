@@ -174,7 +174,7 @@ const OfflineShare = () => {
             // Cleanup function
             if (unsubscribe) unsubscribe();
         };
-    }, [onIncomingConnection, devices, setStatus]);
+    }, [devices, onIncomingConnection, receiveFile, setStatus]);
 
     // Handle file selection
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -182,6 +182,10 @@ export async function sendFile(
 /**
  * Wait for transfer acceptance/rejection from receiver
  */
+function isTransferMessage(value: unknown): value is TransferMessage {
+    return typeof value === 'object' && value !== null && 'type' in value && 'transferId' in value;
+}
+
 function waitForResponse(connection: DataConnection, transferId: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -189,8 +193,12 @@ function waitForResponse(connection: DataConnection, transferId: string): Promis
             reject(new Error('Response timeout - no answer from receiver'));
         }, 30000); // 30 second timeout
 
-        const handler = (data: any) => {
-            const message = data as TransferMessage;
+        const handler = (data: unknown) => {
+            if (!isTransferMessage(data)) {
+                return;
+            }
+
+            const message = data;
 
             if (message.transferId === transferId) {
                 if (message.type === 'accept') {
@@ -233,8 +241,12 @@ export async function receiveFile(
         let transferAccepted = false;
         const startTime = Date.now();
 
-        const handler = (data: any) => {
-            const message = data as TransferMessage;
+        const handler = (data: unknown) => {
+            if (!isTransferMessage(data)) {
+                return;
+            }
+
+            const message = data;
 
             try {
                 switch (message.type) {
@@ -304,7 +316,7 @@ export async function receiveFile(
                         }
                         break;
 
-                    case 'complete':
+                    case 'complete': {
                         // Transfer complete
                         connection.off('data', handler);
 
@@ -323,6 +335,7 @@ export async function receiveFile(
                         console.log('✅ File received successfully');
                         resolve({ file, metadata });
                         break;
+                    }
 
                     case 'error':
                         connection.off('data', handler);

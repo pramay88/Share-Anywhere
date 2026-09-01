@@ -17,6 +17,12 @@ const isDev = import.meta.env.DEV === true;
 // Logging — errors are real signals; suppress in prod to avoid leaking
 // internal state (peer IDs, ICE candidates) to browser consoles.
 // ---------------------------------------------------------------------------
+const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string' && error.trim()) return error;
+    return fallback;
+};
+
 const log = {
     error: (...args: unknown[]) => isDev && console.error('[P2P]', ...args),
 };
@@ -156,11 +162,6 @@ export function useP2PSession(): UseP2PSessionReturn {
     const peerRef = useRef<Peer | null>(null);
     const shareCodeRef = useRef<string | null>(null);
 
-    useEffect(() => {
-        return () => { cleanup(); };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const cleanup = useCallback(() => {
         if (peerRef.current && !peerRef.current.destroyed) {
             peerRef.current.destroy();
@@ -170,7 +171,9 @@ export function useP2PSession(): UseP2PSessionReturn {
         const code = shareCodeRef.current;
         shareCodeRef.current = null;
         if (code) {
-            fetch(`${API_BASE}/p2p/session/${code}`, { method: 'DELETE' }).catch(() => { });
+            fetch(`${API_BASE}/p2p/session/${code}`, { method: 'DELETE' }).catch(() => {
+                // No-op: session cleanup is best-effort and must not interrupt app flow.
+            });
         }
         setConnection(null);
         setShareCode(null);
@@ -178,6 +181,12 @@ export function useP2PSession(): UseP2PSessionReturn {
         setStatus('idle');
         setError(null);
     }, []);
+
+    useEffect(() => {
+        return () => {
+            cleanup();
+        };
+    }, [cleanup]);
 
     const createPeer = useCallback(async (peerId: string): Promise<Peer> => {
         // Guard: destroy any existing peer before creating a new one
@@ -247,9 +256,9 @@ export function useP2PSession(): UseP2PSessionReturn {
                         setConnection(conn);
                         setStatus('connected');
                         console.log('[P2P] Sender ready, connection open');
-                    } catch (err: any) {
+                    } catch (err: unknown) {
                         log.error('Ready handshake failed:', err);
-                        setError('Connection handshake failed — please try again');
+                        setError(getErrorMessage(err, 'Connection handshake failed — please try again'));
                         setStatus('error');
                     }
                 });
@@ -271,9 +280,9 @@ export function useP2PSession(): UseP2PSessionReturn {
             });
 
             return code;
-        } catch (err: any) {
+        } catch (err: unknown) {
             log.error('Failed to create session:', err);
-            setError(err.message || 'Failed to create session');
+            setError(getErrorMessage(err, 'Failed to create session'));
             setStatus('error');
             return null;
         }
@@ -346,9 +355,9 @@ export function useP2PSession(): UseP2PSessionReturn {
             });
 
             return true;
-        } catch (err: any) {
+        } catch (err: unknown) {
             log.error('Failed to join session:', err);
-            setError(err.message || 'Failed to join session');
+            setError(getErrorMessage(err, 'Failed to join session'));
             setStatus('error');
             return false;
         }

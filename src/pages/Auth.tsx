@@ -42,7 +42,7 @@ const Auth = () => {
         toast.success("Account created! You're now signed in.");
         navigate("/");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logError(error, 'handleSignUp');
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -68,7 +68,7 @@ const Auth = () => {
         toast.success("Welcome back!");
         navigate("/");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logError(error, 'handleSignIn');
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
@@ -91,7 +91,7 @@ const Auth = () => {
         toast.success(`Welcome, ${user.displayName || 'there'}!`);
         navigate("/");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logError(error, 'handleGoogleSignIn');
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
