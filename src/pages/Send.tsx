@@ -6,11 +6,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { QRCodeSVG } from "qrcode.react";
-import { useFileTransfer } from "@/hooks/useFileTransfer";
 import { Progress } from "@/components/ui/progress";
 import { Header } from "@/components/Header";
 import { QuickShareForm } from "@/components/QuickShareForm";
+
+import { QRCodeSVG } from "qrcode.react";
+import { useFileTransfer } from "@/hooks/useFileTransfer";
+import { logger } from "@/lib/logger";
 
 const Send = () => {
   const navigate = useNavigate();
@@ -26,22 +28,29 @@ const Send = () => {
   // Check for code in URL and fetch metadata from backend
   useEffect(() => {
     const codeFromUrl = searchParams.get("code");
-    console.log("=== Send Page useEffect ===");
-    console.log("Code from URL:", codeFromUrl);
-    console.log("Current code state:", code);
-    console.log("Should load?", codeFromUrl && code !== codeFromUrl);
+    logger.debug("Send page initialized", {
+      hasCode: Boolean(codeFromUrl),
+    });
 
     // Load share if code is in URL but not yet loaded in state
     if (codeFromUrl && code !== codeFromUrl) {
-      console.log("✅ Loading share from URL:", codeFromUrl);
+      logger.debug("Loading share from URL", {
+        hasCode: Boolean(codeFromUrl),
+      });
       setLoading(true);
 
       // Fetch share metadata from backend
       getTransferByShareCode(codeFromUrl)
         .then((transfer) => {
-          console.log("Transfer response:", transfer);
+          logger.debug("Transfer loaded", {
+            hasTransfer: Boolean(transfer),
+            fileCount: transfer?.files?.length ?? 0,
+          });
           if (transfer) {
-            console.log("✅ Share loaded successfully:", transfer);
+            logger.debug("Transfer loaded", {
+              hasTransfer: Boolean(transfer),
+              fileCount: transfer?.files?.length ?? 0,
+            });
             setCode(codeFromUrl);
             // Extract file info from transfer
             if (transfer.files && transfer.files.length > 0) {
@@ -50,18 +59,19 @@ const Send = () => {
                 size: f.file_size || f.fileSize || 0
               }));
               setFileInfo(fileData);
-              console.log("File info set:", fileData);
+              logger.debug("File metadata prepared", {
+                fileCount: fileData.length,
+              });
             }
             toast.success("Share loaded successfully!");
           } else {
             // Code not found or expired
-            console.log("❌ Share not found");
             toast.error("Share not found or expired");
             navigate("/send", { replace: true });
           }
         })
         .catch((error) => {
-          console.error("❌ Error loading share:", error);
+          logger.error("Failed to load share", error);
           toast.error("Failed to load share");
           navigate("/send", { replace: true });
         })
@@ -70,7 +80,6 @@ const Send = () => {
         });
     } else if (!codeFromUrl && code) {
       // URL changed to remove code, reset state
-      console.log("🔄 Resetting state - no code in URL");
       setCode("");
       setFileInfo([]);
     }
@@ -190,7 +199,7 @@ const Send = () => {
         toast.success("Link copied to clipboard!");
       }
     } catch (error) {
-      console.error('Share error:', error);
+      logger.error("Failed to share QR/link", error);
       toast.error('Sharing failed');
     }
   };
