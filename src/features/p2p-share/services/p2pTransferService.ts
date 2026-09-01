@@ -53,7 +53,7 @@ const RECEIVE_IDLE_TIMEOUT_MS = 60_000;
 // Logging — silent in production
 // ---------------------------------------------------------------------------
 
-const isDev = typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV === true;
+const isDev = typeof import.meta !== 'undefined' && Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV === true);
 const log = {
     warn: (...a: unknown[]) => isDev && console.warn('[P2P]', ...a),
     error: (...a: unknown[]) => isDev && console.error('[P2P]', ...a),
@@ -138,7 +138,8 @@ export function filesToEntries(files: File[] | FileList): FileEntry[] {
     const entries: FileEntry[] = [];
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        entries.push({ file, relativePath: (file as any).webkitRelativePath || file.name });
+        const relativePath = 'webkitRelativePath' in file ? ((file as File & { webkitRelativePath?: string }).webkitRelativePath ?? file.name) : file.name;
+        entries.push({ file, relativePath });
     }
     return entries;
 }
@@ -199,13 +200,25 @@ function concatBuffers(chunks: ArrayBuffer[]): ArrayBuffer {
  * Tries all known property names then falls back to a full key scan so it
  * survives production minification where _dc becomes a single letter.
  */
+type PeerJsConnectionLike = DataConnection & {
+    dataChannel?: RTCDataChannel | null;
+    _dc?: RTCDataChannel | null;
+    _channel?: RTCDataChannel | null;
+    channel?: RTCDataChannel | null;
+    peerConnection?: RTCPeerConnection | null;
+    _pc?: RTCPeerConnection | null;
+    _peerConnection?: RTCPeerConnection | null;
+    [key: string]: unknown;
+};
+
 function getRTCDataChannel(conn: DataConnection): RTCDataChannel | null {
-    const c = conn as any;
+    const c = conn as PeerJsConnectionLike;
     for (const candidate of [c.dataChannel, c._dc, c._channel, c.channel]) {
         if (candidate instanceof RTCDataChannel) return candidate;
     }
     for (const key of Object.keys(c)) {
-        if (c[key] instanceof RTCDataChannel) return c[key];
+        const value = c[key];
+        if (value instanceof RTCDataChannel) return value;
     }
     return null;
 }

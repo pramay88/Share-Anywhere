@@ -275,7 +275,7 @@ export async function getOnlineDevices(
             name: data.deviceName,
             status: isOnline ? data.status : 'offline',
             networkFingerprint: data.networkFingerprint,
-            lastSeen: data.lastHeartbeat,
+            lastSeen: data.lastHeartbeat?.toDate() ?? new Date(0),
         });
     });
 
@@ -316,7 +316,7 @@ export function subscribeToDevices(
                 name: data.deviceName,
                 status: isOnline ? data.status : 'offline',
                 networkFingerprint: data.networkFingerprint,
-                lastSeen: data.lastHeartbeat,
+                lastSeen: data.lastHeartbeat?.toDate() ?? new Date(0),
             });
         });
 
@@ -346,7 +346,7 @@ export async function getDevice(deviceId: string): Promise<Device | null> {
         name: data.deviceName,
         status: isOnline ? data.status : 'offline',
         networkFingerprint: data.networkFingerprint,
-        lastSeen: data.lastHeartbeat,
+        lastSeen: data.lastHeartbeat?.toDate() ?? new Date(0),
     };
 }
 

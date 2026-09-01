@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Download, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,16 +14,27 @@ const ReceiveContent = () => {
   const [searchParams] = useSearchParams();
   const { getTransferByShareCode, downloadFile } = useFileTransfer();
   const [code, setCode] = useState(searchParams.get("code") || "");
-  const [transfer, setTransfer] = useState<any>(null);
+  type TransferFile = {
+    id: string;
+    original_name: string;
+    file_size: number;
+    cloudinary_url: string;
+  };
+
+  type TransferDetails = {
+    transfer: {
+      id: string;
+      content_type?: string;
+      text_content?: string;
+      text_metadata?: unknown;
+    };
+    files: TransferFile[];
+  };
+
+  const [transfer, setTransfer] = useState<TransferDetails | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  useEffect(() => {
-    if (searchParams.get("code")) {
-      handleConnect();
-    }
-  }, [searchParams]);
-
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
     if (code.length < 6) {
       toast.error("Please enter a valid code (at least 6 characters)");
       return;
@@ -34,10 +45,16 @@ const ReceiveContent = () => {
     setIsConnecting(false);
 
     if (transferData) {
-      setTransfer(transferData);
+      setTransfer(transferData as TransferDetails);
       toast.success("Transfer found! Files are ready to download");
     }
-  };
+  }, [code, getTransferByShareCode]);
+
+  useEffect(() => {
+    if (searchParams.get("code")) {
+      void handleConnect();
+    }
+  }, [handleConnect, searchParams]);
 
   const handleDownloadAll = async () => {
     if (!transfer) return;
@@ -52,7 +69,7 @@ const ReceiveContent = () => {
     }
   };
 
-  const handleDownloadSingle = async (file: any) => {
+  const handleDownloadSingle = async (file: TransferFile) => {
     if (!transfer) return;
     await downloadFile(
       transfer.transfer.id,
@@ -152,7 +169,7 @@ const ReceiveContent = () => {
                         </span>
                       </div>
                       <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {transfer.files.map((file: any) => (
+                        {transfer.files.map((file: TransferFile) => (
                           <div
                             key={file.id}
                             className="flex justify-between items-center text-xs sm:text-sm bg-background p-2.5 sm:p-3 rounded-md gap-2"

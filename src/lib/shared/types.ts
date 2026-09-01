@@ -64,7 +64,7 @@ export interface GenerateQRRequest {
 
 // ============= API Response Types =============
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
     success: boolean;
     data?: T;
     error?: ApiError;
@@ -73,7 +73,7 @@ export interface ApiResponse<T = any> {
 export interface ApiError {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
 }
 
 export interface CreateShareResponse {

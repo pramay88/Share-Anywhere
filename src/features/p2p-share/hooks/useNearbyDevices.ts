@@ -164,21 +164,20 @@ export function useNearbyDevices(
             shareCode: null,
             incomingRequest: null,
         }, { merge: true });
-    }, [deviceId]);
+    }, [deviceId, docRef]);
 
     useEffect(() => {
-        registerPresence(deviceName);
+        void registerPresence(deviceName);
 
-        const interval = setInterval(() => {
-            updateDoc(docRef, { lastSeen: serverTimestamp() }).catch(() => { });
+        const interval = window.setInterval(() => {
+            void updateDoc(docRef, { lastSeen: serverTimestamp() });
         }, HEARTBEAT_MS);
 
-        // Cleanup: remove presence on unmount
         return () => {
-            clearInterval(interval);
-            deleteDoc(docRef).catch(() => { });
+            window.clearInterval(interval);
+            void deleteDoc(docRef);
         };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [deviceName, docRef, registerPresence]);
 
     // ── Collection listener ──────────────────────────────────────────────────
 
@@ -235,13 +234,17 @@ export function useNearbyDevices(
     const updateDeviceName = useCallback((name: string) => {
         const trimmed = name.trim().slice(0, 32) || generateDeviceName(deviceId);
         setDeviceName(trimmed);
-        try { localStorage.setItem('p2p_device_name', trimmed); } catch { }
-        updateDoc(docRef, { deviceName: trimmed }).catch(() => { });
-    }, [deviceId]);
+        try {
+            localStorage.setItem('p2p_device_name', trimmed);
+        } catch {
+            // Ignore storage errors; name regeneration is still available.
+        }
+        void updateDoc(docRef, { deviceName: trimmed });
+    }, [deviceId, docRef]);
 
     const publishSession = useCallback(async (peerId: string, shareCode: string) => {
         await updateDoc(docRef, { peerId, shareCode });
-    }, []);
+    }, [docRef]);
 
     const requestConnection = useCallback(async (targetDeviceId: string) => {
         const myData = nearbyRaw.find((d) => d.isYou);
@@ -259,7 +262,7 @@ export function useNearbyDevices(
     const clearIncomingRequest = useCallback(async () => {
         setIncoming(null);
         await updateDoc(docRef, { incomingRequest: null }).catch(() => { });
-    }, []);
+    }, [docRef]);
 
     const myDevice = nearbyRaw.find((d) => d.isYou) ?? null;
     const nearbyDevices = nearbyRaw.filter((d) => !d.isYou);

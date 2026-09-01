@@ -35,7 +35,7 @@ export const useFirebaseAuth = () => {
             await firebaseSignOut();
             setUser(null);
             toast.success('Signed out successfully');
-        } catch (error: any) {
+        } catch (error: unknown) {
             logError(error, 'signOut');
             const friendlyMessage = getUserFriendlyErrorMessage(error);
             toast.error(friendlyMessage);

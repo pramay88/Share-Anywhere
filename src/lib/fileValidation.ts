@@ -42,7 +42,7 @@ export interface ValidationResult {
 }
 
 export interface FileValidationResult extends ValidationResult {
-    file: File;
+    file: File | null;
 }
 
 /**
@@ -96,7 +96,7 @@ export function validateFiles(files: File[]): FileValidationResult[] {
         return [{
             valid: false,
             error: 'No files selected',
-            file: null as any,
+            file: null,
         }];
     }
 
@@ -105,7 +105,7 @@ export function validateFiles(files: File[]): FileValidationResult[] {
         return [{
             valid: false,
             error: `Too many files selected. Maximum is ${MAX_FILES_PER_TRANSFER} files per transfer.`,
-            file: null as any,
+            file: null,
         }];
     }
 

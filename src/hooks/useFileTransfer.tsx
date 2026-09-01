@@ -26,11 +26,13 @@ import { uploadToCloudinary, getCloudinaryUrl } from '@/integrations/cloudinary/
 import { getCurrentUser } from '@/integrations/firebase/auth';
 import { apiClient } from '@/lib/api/client';
 
-function fireAndForgetTransferEvent(userId: string | null | undefined, event: Record<string, any>) {
-  const payload = {
+type TransferEvent = Record<string, unknown>;
+
+function fireAndForgetTransferEvent(userId: string | null | undefined, event: TransferEvent) {
+  const payload: Record<string, unknown> = {
     ...event,
     clientTimestamp: new Date().toISOString(),
-    is_ephemeral: event?.is_ephemeral === true,
+    is_ephemeral: event.is_ephemeral === true,
   };
 
   if (userId) {
@@ -255,7 +257,7 @@ export const useFileTransfer = () => {
       });
 
       return { shareCode, transferId };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Clear any remaining toasts before showing error
       if (uploadProgressToastId !== undefined) {
         toast.dismiss(uploadProgressToastId);
@@ -269,7 +271,7 @@ export const useFileTransfer = () => {
         transferType: 'internet',
         direction: 'send',
         status: 'failed',
-        error: error?.message || 'Upload failed',
+        error: error instanceof Error ? error.message : 'Upload failed',
         durationMs: Date.now() - startedAt,
       });
 
@@ -438,7 +440,7 @@ export const useFileTransfer = () => {
       });
 
       return { shareCode, transferId };
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (codeGenToastId !== undefined) {
         toast.dismiss(codeGenToastId);
       }
@@ -448,7 +450,7 @@ export const useFileTransfer = () => {
         transferType: 'internet',
         direction: 'send',
         status: 'failed',
-        error: error?.message || 'Text upload failed',
+        error: error instanceof Error ? error.message : 'Text upload failed',
         durationMs: Date.now() - startedAt,
       });
 
@@ -499,7 +501,7 @@ export const useFileTransfer = () => {
       );
 
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logError(error, 'getTransferByShareCode');
       const friendlyMessage = getUserFriendlyErrorMessage(error);
       toast.error(friendlyMessage);
@@ -598,7 +600,7 @@ export const useFileTransfer = () => {
         speedBytesPerSec: 0,
         retries: 0,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Dismiss loading toast before showing error
       if (toastId !== undefined) {
         toast.dismiss(toastId);
@@ -611,7 +613,7 @@ export const useFileTransfer = () => {
         direction: 'receive',
         status: 'failed',
         fileName: originalName,
-        error: error?.message || 'Download failed',
+        error: error instanceof Error ? error.message : 'Download failed',
         durationMs: Date.now() - startedAt,
       });
 

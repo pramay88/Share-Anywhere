@@ -66,7 +66,7 @@ export async function createTransfer(params: {
         languageHint?: string;
     };
 }): Promise<string> {
-    const transferData: any = {
+    const transferData: Record<string, unknown> = {
         owner_id: params.ownerId,
         share_code: params.shareCode.toUpperCase(),
         content_type: params.contentType,

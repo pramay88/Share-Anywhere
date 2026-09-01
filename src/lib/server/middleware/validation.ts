@@ -68,7 +68,7 @@ export function validateFileSize(size: number): { valid: boolean; error?: string
  * Validate file type
  */
 export function validateFileType(mimeType: string): { valid: boolean; error?: string } {
-    if (!ALLOWED_FILE_TYPES.includes(mimeType as any)) {
+    if (!(ALLOWED_FILE_TYPES as readonly string[]).includes(mimeType)) {
         return {
             valid: false,
             error: `File type ${mimeType} is not allowed`,

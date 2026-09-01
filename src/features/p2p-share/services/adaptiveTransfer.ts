@@ -76,13 +76,25 @@ const RTT_MEDIUM_MS  = 40;   // ms — above this, cap chunk size at 64 KB
  * Safely find the underlying RTCDataChannel from a PeerJS DataConnection.
  * Tries all known property names, then scans all keys to survive minification.
  */
+type PeerJsConnectionLike = DataConnection & {
+    dataChannel?: RTCDataChannel | null;
+    _dc?: RTCDataChannel | null;
+    _channel?: RTCDataChannel | null;
+    channel?: RTCDataChannel | null;
+    peerConnection?: RTCPeerConnection | null;
+    _pc?: RTCPeerConnection | null;
+    _peerConnection?: RTCPeerConnection | null;
+    [key: string]: unknown;
+};
+
 function getRTCDataChannel(conn: DataConnection): RTCDataChannel | null {
-    const c = conn as any;
+    const c = conn as PeerJsConnectionLike;
     for (const candidate of [c.dataChannel, c._dc, c._channel, c.channel]) {
         if (candidate instanceof RTCDataChannel) return candidate;
     }
     for (const key of Object.keys(c)) {
-        if (c[key] instanceof RTCDataChannel) return c[key];
+        const value = c[key];
+        if (value instanceof RTCDataChannel) return value;
     }
     return null;
 }
@@ -92,12 +104,13 @@ function getRTCDataChannel(conn: DataConnection): RTCDataChannel | null {
  * Same resilience strategy as getRTCDataChannel.
  */
 function getRTCPeerConnection(conn: DataConnection): RTCPeerConnection | null {
-    const c = conn as any;
+    const c = conn as PeerJsConnectionLike;
     for (const candidate of [c.peerConnection, c._pc, c._peerConnection]) {
         if (candidate instanceof RTCPeerConnection) return candidate;
     }
     for (const key of Object.keys(c)) {
-        if (c[key] instanceof RTCPeerConnection) return c[key];
+        const value = c[key];
+        if (value instanceof RTCPeerConnection) return value;
     }
     return null;
 }

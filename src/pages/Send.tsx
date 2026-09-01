@@ -54,9 +54,9 @@ const Send = () => {
             setCode(codeFromUrl);
             // Extract file info from transfer
             if (transfer.files && transfer.files.length > 0) {
-              const fileData = transfer.files.map((f: any) => ({
-                name: f.original_name || f.fileName || 'file',
-                size: f.file_size || f.fileSize || 0
+              const fileData = transfer.files.map((file: { original_name?: string; fileName?: string; file_size?: number; fileSize?: number }) => ({
+                name: file.original_name || file.fileName || 'file',
+                size: file.file_size ?? file.fileSize ?? 0
               }));
               setFileInfo(fileData);
               logger.debug("File metadata prepared", {
@@ -85,7 +85,7 @@ const Send = () => {
     }
   }, [searchParams, code, getTransferByShareCode, navigate]);
 
-  const handleFileSelect = async (selectedFiles: FileList | null) => {
+  const handleFileSelect = useCallback(async (selectedFiles: FileList | null) => {
     if (selectedFiles) {
       const fileArray = Array.from(selectedFiles);
       setFiles(fileArray);
@@ -104,12 +104,12 @@ const Send = () => {
         toast.success("Files uploaded and ready to share!");
       }
     }
-  };
+  }, [customCode, navigate, uploadFiles]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    handleFileSelect(e.dataTransfer.files);
+    void handleFileSelect(e.dataTransfer.files);
   }, [handleFileSelect]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -180,7 +180,11 @@ const Send = () => {
 
       const file = new File([pngBlob], `qr-${code}.png`, { type: 'image/png' });
 
-      if (navigator.share && (navigator as any).canShare?.({ files: [file] })) {
+      const canShareFiles = typeof navigator.canShare === 'function'
+        ? navigator.canShare({ files: [file] })
+        : false;
+
+      if (navigator.share && canShareFiles) {
         await navigator.share({
           files: [file],
           title: 'Share QR Code',

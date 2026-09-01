@@ -220,6 +220,35 @@ const History = () => {
 
     // ─── Data loading ─────────────────────────────────────────────────────────
 
+    type HistoryApiResponse = {
+        success?: boolean;
+        error?: { message?: string };
+        records?: HistoryRecord[];
+    };
+
+    type ActiveShareRow = {
+        id: string;
+        transferId?: string;
+        shareCode?: string | null;
+        transferType?: 'internet' | 'p2p' | string;
+        direction?: 'send' | 'receive' | string;
+        startedAt?: string | number | Date | null;
+        timestamp?: string | number | Date | null;
+        totalBytes?: number | string;
+        fileSize?: number | string;
+        file?: { name?: string; type?: string; size?: number | string };
+        fileName?: string | null;
+        fileType?: string | null;
+        durationMs?: number | string;
+        downloads_count?: number | string;
+    };
+
+    type ActiveSharesResponse = {
+        success?: boolean;
+        error?: { message?: string };
+        activeShares?: ActiveShareRow[];
+    };
+
     const loadInitialData = useCallback(async () => {
         if (!user) return;
 
@@ -240,29 +269,26 @@ const History = () => {
                 apiClient.getActiveShares(user.uid),
             ]);
 
-            if (!historyResponse.success) {
-                throw new Error(
-                    (historyResponse as any)?.error?.message || 'Failed to load history'
-                );
+            const typedHistoryResponse = historyResponse as HistoryApiResponse;
+            const typedActiveResponse = activeResponse as ActiveSharesResponse;
+
+            if (!typedHistoryResponse.success) {
+                throw new Error(typedHistoryResponse.error?.message || 'Failed to load history');
             }
-            if (!activeResponse.success) {
-                throw new Error(
-                    (activeResponse as any)?.error?.message || 'Failed to load active shares'
-                );
+            if (!typedActiveResponse.success) {
+                throw new Error(typedActiveResponse.error?.message || 'Failed to load active shares');
             }
 
-            const records = ((historyResponse as any).records || []) as HistoryRecord[];
+            const records = typedHistoryResponse.records || [];
 
-            const activeRows = (
-                ((activeResponse as any).activeShares || []) as any[]
-            ).map((row): HistoryRecord => {
+            const activeRows = (typedActiveResponse.activeShares || []).map((row): HistoryRecord => {
                 const startedAtMs = row.startedAt ? new Date(row.startedAt).getTime() : null;
                 const timestampMs = row.timestamp ? new Date(row.timestamp).getTime() : null;
                 const inferredStartMs =
-                    Number.isFinite(startedAtMs as number)
-                        ? (startedAtMs as number)
-                        : Number.isFinite(timestampMs as number)
-                        ? (timestampMs as number)
+                    Number.isFinite(startedAtMs)
+                        ? startedAtMs
+                        : Number.isFinite(timestampMs)
+                        ? timestampMs
                         : null;
 
                 const totalBytes = Number(row.totalBytes || row.fileSize || row.file?.size || 0);
@@ -292,7 +318,7 @@ const History = () => {
                     durationMs,
                     speedBytesPerSec,
                     error: null,
-                    timestamp: row.timestamp || new Date().toISOString(),
+                    timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : new Date().toISOString(),
                 };
             });
 
@@ -310,12 +336,10 @@ const History = () => {
                     return !key || !activeKeys.has(key);
                 });
 
-            // Merge and sort newest-first
             const mergedRecords = [...activeRows, ...terminalRecords].sort(
                 (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             );
 
-            // Compute stats from all records (terminal + active)
             const allRecords = [...activeRows, ...terminalRecords];
             const totalBytes = allRecords.reduce(
                 (sum, r) => sum + (r.totalBytes || r.fileSize || 0),
@@ -338,9 +362,10 @@ const History = () => {
             setHistory(mergedRecords);
             setStats(computedStats);
             setCache(user.uid, { history: mergedRecords, stats: computedStats });
-        } catch (error: any) {
-            setErrorMessage(error.message || 'Failed to load history');
-            toast.error(error.message || 'Failed to load history');
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to load history';
+            setErrorMessage(message);
+            toast.error(message);
         } finally {
             setLoadingInitial(false);
             setRefreshing(false);
@@ -416,7 +441,11 @@ const History = () => {
         try {
             const response = await apiClient.terminateShare(user.uid, shareId);
             if (!response.success) {
-                throw new Error((response as any)?.error?.message || 'Failed to terminate share');
+                const message =
+                    typeof response?.error?.message === 'string'
+                        ? response.error.message
+                        : 'Failed to terminate share';
+                throw new Error(message);
             }
             setHistory((prev) =>
                 prev.map((item) =>
@@ -424,8 +453,9 @@ const History = () => {
                 )
             );
             toast.success('Share terminated successfully');
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to terminate share');
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to terminate share';
+            toast.error(message);
         } finally {
             setTerminatingShares((prev) => {
                 const next = new Set(prev);

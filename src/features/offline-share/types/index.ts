@@ -18,7 +18,7 @@ export interface Device {
     name: string;
     status: DeviceStatus;
     networkFingerprint: string;
-    lastSeen: Timestamp;
+    lastSeen: Date;
     // Future extensibility
     groups?: string[];
     isFavorite?: boolean;
@@ -102,7 +102,7 @@ export interface WebRTCSignal {
     fromDeviceId: string;
     toDeviceId: string;
     type: 'offer' | 'answer' | 'ice-candidate';
-    data: any;
+    data: RTCSessionDescriptionInit | RTCIceCandidateInit | Record<string, unknown>;
     createdAt: Timestamp;
 }
 
