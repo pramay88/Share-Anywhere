@@ -1,22 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+.next/
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
 firebase-debug.log
 
-# Editor directories and files
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local/editor files
+*.local
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -24,25 +38,18 @@ firebase-debug.log
 *.sln
 *.sw?
 
-# Next.js build output
-.next
+# Vercel
+.vercel/
 
-.env
-.env
-.env.*
-*.env
-.env.local
-.env.vercel
-.env.old
-
-/node_modules
+# Firebase
 supabase/config.toml
-.vercel
 
-# Firebase helper scripts (contain credentials)
+# Firebase helper scripts containing credentials
 encode-firebase-key.ps1
 encode-service-account.js
 
-# Service account keys (never commit!)
+# Service account keys
 sendanywhere-7e45d-*.json
 *-service-account*.json
+
+project.py
