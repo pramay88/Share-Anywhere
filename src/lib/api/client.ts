@@ -16,7 +16,7 @@ import type {
 
 interface RequestOptions {
     method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-    body?: any;
+    body?: unknown;
     headers?: Record<string, string>;
     authToken?: string;
     silent?: boolean;
@@ -127,15 +127,16 @@ class ApiClient {
             }
 
             return data;
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (!options.silent) {
                 console.error('API request failed:', error);
             }
+            const message = error instanceof Error ? error.message : 'Network request failed';
             return {
                 success: false,
                 error: {
                     code: 'NETWORK_ERROR',
-                    message: error.message || 'Network request failed',
+                    message,
                 },
             };
         }
@@ -231,7 +232,7 @@ class ApiClient {
     /**
      * Get user's share history (last 24 hours)
      */
-    async getUserHistory(userId: string, params?: Record<string, string | number | undefined>): Promise<ApiResponse<any>> {
+    async getUserHistory<T = unknown>(userId: string, params?: Record<string, string | number | undefined>): Promise<ApiResponse<T>> {
         const searchParams = new URLSearchParams();
         if (params) {
             Object.entries(params).forEach(([key, value]) => {
@@ -246,7 +247,7 @@ class ApiClient {
             ? `${API_ENDPOINTS.USER.HISTORY(userId)}?${query}`
             : API_ENDPOINTS.USER.HISTORY(userId);
 
-        return this.request(url, {
+        return this.request<T>(url, {
             method: 'GET',
         });
     }
@@ -254,8 +255,8 @@ class ApiClient {
     /**
      * Get user statistics
      */
-    async getUserStats(userId: string): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.STATS(userId), {
+    async getUserStats<T = unknown>(userId: string): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.STATS(userId), {
             method: 'GET',
         });
     }
@@ -263,8 +264,8 @@ class ApiClient {
     /**
      * Get active internet shares for a user
      */
-    async getActiveShares(userId: string): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.ACTIVE_SHARES(userId), {
+    async getActiveShares<T = unknown>(userId: string): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.ACTIVE_SHARES(userId), {
             method: 'GET',
         });
     }
@@ -272,8 +273,8 @@ class ApiClient {
     /**
      * Stop/delete an active share
      */
-    async stopActiveShare(userId: string, shareCode: string): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.STOP_SHARE(userId, shareCode), {
+    async stopActiveShare<T = unknown>(userId: string, shareCode: string): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.STOP_SHARE(userId, shareCode), {
             method: 'DELETE',
         });
     }
@@ -281,8 +282,8 @@ class ApiClient {
     /**
      * Terminate an active share by ID
      */
-    async terminateShare(userId: string, shareId: string): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.TERMINATE_SHARE(userId, shareId), {
+    async terminateShare<T = unknown>(userId: string, shareId: string): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.TERMINATE_SHARE(userId, shareId), {
             method: 'POST',
         });
     }
@@ -290,8 +291,8 @@ class ApiClient {
     /**
      * Track transfer analytics/history event
      */
-    async trackTransferEvent(userId: string, event: Record<string, any>): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.TRACK_EVENT(userId), {
+    async trackTransferEvent<T = unknown>(userId: string, event: Record<string, unknown>): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.TRACK_EVENT(userId), {
             method: 'POST',
             body: event,
             silent: true,
@@ -301,8 +302,8 @@ class ApiClient {
     /**
      * Track transfer event without user identity (guest mode)
      */
-    async trackAnonymousTransferEvent(event: Record<string, any>): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.TRACK_EVENT_ANON, {
+    async trackAnonymousTransferEvent<T = unknown>(event: Record<string, unknown>): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.TRACK_EVENT_ANON, {
             method: 'POST',
             body: event,
             silent: true,
@@ -312,8 +313,8 @@ class ApiClient {
     /**
      * Get global admin analytics summary
      */
-    async getAdminAnalyticsSummary(): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.USER.ADMIN_ANALYTICS, {
+    async getAdminAnalyticsSummary<T = unknown>(): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.USER.ADMIN_ANALYTICS, {
             method: 'GET',
         });
     }
@@ -321,8 +322,8 @@ class ApiClient {
     /**
      * Check API health
      */
-    async healthCheck(): Promise<ApiResponse<any>> {
-        return this.request(API_ENDPOINTS.HEALTH, {
+    async healthCheck<T = unknown>(): Promise<ApiResponse<T>> {
+        return this.request<T>(API_ENDPOINTS.HEALTH, {
             method: 'GET',
         });
     }

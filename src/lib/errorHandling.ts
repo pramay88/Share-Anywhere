@@ -53,35 +53,51 @@ export async function retryWithBackoff<T>(
   throw lastError!;
 }
 
+interface ErrorLike {
+  message?: string;
+  code?: string;
+  status?: number;
+  stack?: string;
+}
+
+function toErrorLike(error: unknown): ErrorLike | null {
+  if (typeof error === 'object' && error !== null) {
+    return error as ErrorLike;
+  }
+  return null;
+}
+
 /**
  * Check if an error is retryable (network errors, timeouts, etc.)
  */
-export function isRetryableError(error: any): boolean {
+export function isRetryableError(error: unknown): boolean {
+  const err = toErrorLike(error);
+
   // Network errors
-  if (error?.message?.includes('fetch') || 
-      error?.message?.includes('network') ||
-      error?.message?.includes('NetworkError')) {
+  if (err?.message?.includes('fetch') || 
+      err?.message?.includes('network') ||
+      err?.message?.includes('NetworkError')) {
     return true;
   }
 
   // Timeout errors
-  if (error?.message?.includes('timeout') || 
-      error?.message?.includes('timed out')) {
+  if (err?.message?.includes('timeout') || 
+      err?.message?.includes('timed out')) {
     return true;
   }
 
   // Supabase specific retryable errors
-  if (error?.code === 'PGRST301' || // Connection timeout
-      error?.code === '503' ||       // Service unavailable
-      error?.code === '429') {       // Too many requests
+  if (err?.code === 'PGRST301' || // Connection timeout
+      err?.code === '503' ||       // Service unavailable
+      err?.code === '429') {       // Too many requests
     return true;
   }
 
   // HTTP status codes that are retryable
-  if (error?.status === 408 || // Request timeout
-      error?.status === 429 || // Too many requests
-      error?.status === 503 || // Service unavailable
-      error?.status === 504) { // Gateway timeout
+  if (err?.status === 408 || // Request timeout
+      err?.status === 429 || // Too many requests
+      err?.status === 503 || // Service unavailable
+      err?.status === 504) { // Gateway timeout
     return true;
   }
 
@@ -98,79 +114,81 @@ export function isOffline(): boolean {
 /**
  * Get user-friendly error message
  */
-export function getUserFriendlyErrorMessage(error: any): string {
+export function getUserFriendlyErrorMessage(error: unknown): string {
   // Offline error
   if (isOffline()) {
     return "You appear to be offline. Please check your internet connection and try again.";
   }
 
+  const err = toErrorLike(error);
+
   // Network errors
-  if (error?.message?.includes('fetch') || 
-      error?.message?.includes('network') ||
-      error?.message?.includes('NetworkError')) {
+  if (err?.message?.includes('fetch') || 
+      err?.message?.includes('network') ||
+      err?.message?.includes('NetworkError')) {
     return "Network error occurred. Please check your connection and try again.";
   }
 
   // Timeout errors
-  if (error?.message?.includes('timeout') || 
-      error?.message?.includes('timed out')) {
+  if (err?.message?.includes('timeout') || 
+      err?.message?.includes('timed out')) {
     return "Request timed out. Please try again.";
   }
 
   // Supabase auth errors
-  if (error?.message?.includes('Invalid login credentials')) {
+  if (err?.message?.includes('Invalid login credentials')) {
     return "Invalid email or password. Please try again.";
   }
 
-  if (error?.message?.includes('Email not confirmed')) {
+  if (err?.message?.includes('Email not confirmed')) {
     return "Please confirm your email address before signing in.";
   }
 
   // Storage errors
-  if (error?.message?.includes('storage')) {
-    if (error?.message?.includes('quota')) {
+  if (err?.message?.includes('storage')) {
+    if (err?.message?.includes('quota')) {
       return "Storage quota exceeded. Please contact support.";
     }
-    if (error?.message?.includes('not found')) {
+    if (err?.message?.includes('not found')) {
       return "File not found. It may have been deleted or expired.";
     }
     return "Storage error occurred. Please try again.";
   }
 
   // Database errors
-  if (error?.message?.includes('duplicate key')) {
+  if (err?.message?.includes('duplicate key')) {
     return "This code is already in use. Please choose a different code.";
   }
 
-  if (error?.message?.includes('violates foreign key constraint')) {
+  if (err?.message?.includes('violates foreign key constraint')) {
     return "Invalid reference. Please try again.";
   }
 
   // File size errors
-  if (error?.message?.includes('file size') || 
-      error?.message?.includes('too large')) {
+  if (err?.message?.includes('file size') || 
+      err?.message?.includes('too large')) {
     return "File is too large. Maximum size is 50MB per file.";
   }
 
   // Expired transfer
-  if (error?.message?.includes('expired')) {
+  if (err?.message?.includes('expired')) {
     return "This transfer has expired and is no longer available.";
   }
 
   // Invalid code
-  if (error?.message?.includes('Invalid or expired code')) {
+  if (err?.message?.includes('Invalid or expired code')) {
     return "Invalid share code. Please check the code and try again.";
   }
 
   // Environment variable errors
-  if (error?.message?.includes('SUPABASE') || 
-      error?.message?.includes('environment')) {
+  if (err?.message?.includes('SUPABASE') || 
+      err?.message?.includes('environment')) {
     return "Application configuration error. Please contact support.";
   }
 
   // Generic error with message
-  if (error?.message) {
-    return error.message;
+  if (err?.message) {
+    return err.message;
   }
 
   // Fallback
@@ -203,15 +221,16 @@ export function withTimeout<T>(
 /**
  * Log error for debugging (can be extended to send to error tracking service)
  */
-export function logError(error: any, context?: string): void {
+export function logError(error: unknown, context?: string): void {
   const timestamp = new Date().toISOString();
   const contextStr = context ? `[${context}]` : '';
+  const err = toErrorLike(error);
   
   console.error(`${timestamp} ${contextStr} Error:`, {
-    message: error?.message,
-    code: error?.code,
-    status: error?.status,
-    stack: error?.stack,
+    message: err?.message,
+    code: err?.code,
+    status: err?.status,
+    stack: err?.stack,
     details: error,
   });
 }

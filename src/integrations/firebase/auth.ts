@@ -37,14 +37,15 @@ export async function signInWithGoogle(): Promise<User> {
         });
         const result = await signInWithPopup(auth, provider);
         return result.user;
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Google sign in error:', error);
+        const authError = error as { code?: string };
         // Handle specific errors
-        if (error.code === 'auth/popup-closed-by-user') {
+        if (authError.code === 'auth/popup-closed-by-user') {
             throw new Error('Sign-in cancelled. Please try again.');
-        } else if (error.code === 'auth/popup-blocked') {
+        } else if (authError.code === 'auth/popup-blocked') {
             throw new Error('Pop-up blocked. Please allow pop-ups for this site.');
-        } else if (error.code === 'auth/cancelled-popup-request') {
+        } else if (authError.code === 'auth/cancelled-popup-request') {
             throw new Error('Another sign-in is in progress.');
         }
         throw error;
